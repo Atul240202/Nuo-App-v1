@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,12 @@ import {
   TouchableOpacity,
   Platform,
   StatusBar,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
 import CircularProgress from '../components/CircularProgress';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
@@ -33,6 +35,8 @@ const COLORS = {
 
 export default function HomeScreen() {
   const [userName, setUserName] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -46,6 +50,45 @@ export default function HomeScreen() {
       } catch {}
     })();
   }, []);
+
+  const toggleRecording = async () => {
+    if (isRecording && recording) {
+      // Stop
+      try {
+        await recording.stopAndUnloadAsync();
+        const status = await recording.getStatusAsync();
+        const duration = status.durationMillis || 0;
+        setRecording(null);
+        setIsRecording(false);
+        // Send to backend
+        try {
+          await fetch(`${BACKEND_URL}/api/voice/upload`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ duration }),
+          });
+        } catch {}
+      } catch {
+        setRecording(null);
+        setIsRecording(false);
+      }
+    } else {
+      // Start
+      try {
+        const { status } = await Audio.requestPermissionsAsync();
+        if (status !== 'granted') return;
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+        const { recording: rec } = await Audio.Recording.createAsync(
+          Audio.RecordingOptionsPresets.HIGH_QUALITY
+        );
+        setRecording(rec);
+        setIsRecording(true);
+      } catch {
+        setIsRecording(false);
+      }
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -62,9 +105,9 @@ export default function HomeScreen() {
           <AutoRecoveries />
           <HowWeKnowYou />
           <RecoveryPlan />
-          <VentCTA />
+          <VentCTA isRecording={isRecording} onPress={toggleRecording} />
         </ScrollView>
-        <BottomTabBar />
+        <BottomTabBar isRecording={isRecording} onMicPress={toggleRecording} />
       </View>
     </SafeAreaView>
   );
@@ -241,21 +284,21 @@ function RecoveryPlan() {
   );
 }
 
-function VentCTA() {
+function VentCTA({ isRecording, onPress }: { isRecording: boolean; onPress: () => void }) {
   return (
-    <TouchableOpacity activeOpacity={0.9} testID="vent-cta-btn">
+    <TouchableOpacity activeOpacity={0.9} onPress={onPress} testID="vent-cta-btn">
       <LinearGradient
-        colors={['#9D4CDD', '#7F00FF']}
+        colors={isRecording ? ['#FF4466', '#CC2244'] : ['#9D4CDD', '#7F00FF']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.ventBanner}
       >
         <View style={styles.ventMicCircle}>
-          <Ionicons name="mic-outline" size={28} color="#FFF" />
+          <Ionicons name={isRecording ? 'stop' : 'mic-outline'} size={28} color="#FFF" />
         </View>
         <View style={styles.ventTextCol}>
-          <Text style={styles.ventTitle}>Vent with Nuo</Text>
-          <Text style={styles.ventSubtitle}>Tap to talk — I'm here to listen</Text>
+          <Text style={styles.ventTitle}>{isRecording ? 'Listening...' : 'Vent with Nuo'}</Text>
+          <Text style={styles.ventSubtitle}>{isRecording ? 'Tap to stop recording' : "Tap to talk — I'm here to listen"}</Text>
         </View>
       </LinearGradient>
     </TouchableOpacity>
@@ -270,16 +313,64 @@ const TABS = [
   { id: 'you', label: 'You', icon: 'user', active: false },
 ];
 
-function BottomTabBar() {
+function BottomTabBar({ isRecording, onMicPress }: { isRecording: boolean; onMicPress: () => void }) {
+  const heartbeat = useRef(new Animated.Value(1)).current;
+  const pulseRing = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isRecording) {
+      // Heartbeat: smooth scale 1→1.25→1 looping
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(heartbeat, { toValue: 1.25, duration: 600, useNativeDriver: true }),
+          Animated.timing(heartbeat, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.timing(heartbeat, { toValue: 1.18, duration: 500, useNativeDriver: true }),
+          Animated.timing(heartbeat, { toValue: 1, duration: 500, useNativeDriver: true }),
+        ])
+      ).start();
+      // Pulse ring expand + fade
+      Animated.loop(
+        Animated.sequence([
+          Animated.parallel([
+            Animated.timing(pulseRing, { toValue: 1, duration: 1200, useNativeDriver: true }),
+          ]),
+          Animated.timing(pulseRing, { toValue: 0, duration: 0, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      heartbeat.stopAnimation();
+      pulseRing.stopAnimation();
+      Animated.timing(heartbeat, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+      pulseRing.setValue(0);
+    }
+  }, [isRecording]);
+
+  const ringScale = pulseRing.interpolate({ inputRange: [0, 1], outputRange: [1, 2] });
+  const ringOpacity = pulseRing.interpolate({ inputRange: [0, 0.8, 1], outputRange: [0.5, 0.1, 0] });
+
   return (
     <View style={styles.tabBarContainer} testID="bottom-tab-bar">
       {TABS.map((tab) => {
         if (tab.id === 'mic') {
           return (
-            <TouchableOpacity key={tab.id} style={styles.fabWrapper} testID="tab-mic-btn">
-              <LinearGradient colors={['#9D4CDD', '#7F00FF']} style={styles.fabButton}>
-                <Ionicons name="mic-outline" size={28} color="#FFF" />
-              </LinearGradient>
+            <TouchableOpacity key={tab.id} style={styles.fabWrapper} onPress={onMicPress} testID="tab-mic-btn">
+              {/* Pulse ring behind FAB when recording */}
+              {isRecording && (
+                <Animated.View
+                  style={[
+                    styles.pulseRing,
+                    { transform: [{ scale: ringScale }], opacity: ringOpacity },
+                  ]}
+                />
+              )}
+              <Animated.View style={{ transform: [{ scale: heartbeat }] }}>
+                <LinearGradient
+                  colors={isRecording ? ['#FF4466', '#CC2244'] : ['#9D4CDD', '#7F00FF']}
+                  style={styles.fabButton}
+                >
+                  <Ionicons name={isRecording ? 'stop' : 'mic-outline'} size={28} color="#FFF" />
+                </LinearGradient>
+              </Animated.View>
             </TouchableOpacity>
           );
         }
@@ -659,6 +750,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: -30,
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FF4466',
   },
   fabButton: {
     width: 60,
