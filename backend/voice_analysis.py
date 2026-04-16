@@ -219,26 +219,34 @@ def analyse_calendar(events: list) -> dict:
     }
 
 
-async def generate_insight(
-    emotion: str, stress: int, recovery: int,
-    transcript: str, cal_data: dict,
-    sleep_data: dict = None,
-    audio_library: list = None,
-) -> dict:
-    """Generate Nuo's full structured response using production prompt."""
-    from nuo_prompts import SYSTEM_PROMPT, build_user_prompt
+def compute_calendar_context(cal_events_full: list, cal_data: dict) -> dict:
+    """
+    Compute real time-stamped gaps, event summaries, busiest window
+    from actual Google Calendar events so the LLM never hallucinates.
+    """
+    if not cal_events_full:
+        return {
+            "total_meetings": 0,
+            "back_to_back_meetings": 0,
+            "first_meeting_starts": "No meetings today",
+            "last_meeting_ends": "No meetings today",
+            "busiest_window": "No meetings today",
+            "gaps": ["Entire day is free"],
+            "events_summary": [],
+        }
 
-    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    # Parse events into (start_dt, end_dt, title) tuples
+    parsed = []
+    for ev in cal_events_full:
+        try:
+            s = datetime.fromisoformat(ev["start"].replace("Z", "+00:00"))
+            e = datetime.fromisoformat(ev["end"].replace("Z", "+00:00"))
+            parsed.append((s, e, ev.get("title", "Meeting")))
+        except Exception:
+            continue
 
-    # Build context for the production prompt
-    sleep = sleep_data or {}
-    context = {
-        "sleep": {
-            "avg_sleep_hours_3d": sleep.get("latest_actual_sleep", None),
-            "avg_sleep_debt_hours_3d": sleep.get("avg_debt_3d", None),
-            "nights": sleep.get("records", []),
-        },
-        "calendar": {
+    if not parsed:
+        return {
             "total_meetings": cal_data.get("meetings_count", 0),
             "back_to_back_meetings": cal_data.get("back_to_back", 0),
             "first_meeting_starts": "N/A",
@@ -246,7 +254,142 @@ async def generate_insight(
             "busiest_window": "N/A",
             "gaps": [],
             "events_summary": [],
+        }
+
+    parsed.sort(key=lambda x: x[0])
+
+    def fmt_time(dt):
+        """Format datetime to human-readable like '2:30 PM'"""
+        return dt.strftime("%-I:%M %p") if hasattr(dt, 'strftime') else str(dt)
+
+    # Event summaries for LLM
+    events_summary = []
+    for s, e, title in parsed:
+        dur_min = int((e - s).total_seconds() / 60)
+        events_summary.append(f"{fmt_time(s)} - {fmt_time(e)}: {title} ({dur_min} min)")
+
+    first_start = fmt_time(parsed[0][0])
+    last_end = fmt_time(parsed[-1][1])
+
+    # Compute real time-stamped gaps (>= 15 min)
+    gaps = []
+    now = datetime.now(timezone.utc)
+
+    # Gap before first meeting (from now)
+    if parsed[0][0] > now:
+        gap_min = int((parsed[0][0] - now).total_seconds() / 60)
+        if gap_min >= 15:
+            gaps.append(f"NOW - {fmt_time(parsed[0][0])} ({gap_min} min free)")
+
+    # Gaps between meetings
+    for i in range(1, len(parsed)):
+        gap_start = parsed[i - 1][1]
+        gap_end = parsed[i][0]
+        gap_min = int((gap_end - gap_start).total_seconds() / 60)
+        if gap_min >= 15:
+            gaps.append(f"{fmt_time(gap_start)} - {fmt_time(gap_end)} ({gap_min} min free)")
+
+    # Gap after last meeting (until end of day ~9 PM)
+    eod = parsed[-1][1].replace(hour=21, minute=0, second=0)
+    after_last_gap = int((eod - parsed[-1][1]).total_seconds() / 60)
+    if after_last_gap >= 15:
+        gaps.append(f"{fmt_time(parsed[-1][1])} - 9:00 PM ({after_last_gap} min free)")
+
+    if not gaps:
+        gaps.append("No gaps >= 15 min available today")
+
+    # Busiest window: find 2-hour window with most meetings
+    busiest_window = "N/A"
+    if len(parsed) >= 2:
+        max_count = 0
+        best_window = ""
+        for i, (s, e, _) in enumerate(parsed):
+            window_end = s + timedelta(hours=2)
+            count = sum(1 for ps, pe, _ in parsed if ps >= s and ps < window_end)
+            if count > max_count:
+                max_count = count
+                best_window = f"{fmt_time(s)} - {fmt_time(window_end)} ({count} meetings)"
+        busiest_window = best_window
+
+    return {
+        "total_meetings": len(parsed),
+        "back_to_back_meetings": cal_data.get("back_to_back", 0),
+        "first_meeting_starts": first_start,
+        "last_meeting_ends": last_end,
+        "busiest_window": busiest_window,
+        "gaps": gaps,
+        "events_summary": events_summary,
+    }
+
+
+def compute_urgency_tier(stress: int, recovery: int, sleep_data: dict) -> tuple:
+    """
+    Pre-compute urgency tier based on stress score, recovery, and sleep.
+    Returns (tier, signals) where tier is 'high', 'moderate', or 'low'.
+    High stress → immediate/earliest intervention.
+    Low stress → relaxed later scheduling.
+    """
+    sleep_debt = sleep_data.get("avg_debt_3d", 0) if sleep_data else 0
+    stress_sigma = round(stress / 50, 2)
+
+    signals = []
+    if stress >= 70:
+        signals.append(f"stress_score={stress} (HIGH, >=70)")
+    elif stress >= 50:
+        signals.append(f"stress_score={stress} (elevated, >=50)")
+    if recovery < 35:
+        signals.append(f"recovery={recovery} (critical, <35)")
+    elif recovery < 50:
+        signals.append(f"recovery={recovery} (low, <50)")
+    if sleep_debt and sleep_debt >= 4:
+        signals.append(f"sleep_debt={sleep_debt}h (significant, >=4h)")
+
+    # Tier logic: stress-score driven primarily
+    if stress >= 70 or (recovery < 35 and stress >= 50):
+        tier = "high"
+    elif stress >= 45 or recovery < 50 or (sleep_debt and sleep_debt >= 3):
+        tier = "moderate"
+    else:
+        tier = "low"
+
+    return tier, signals
+
+
+async def generate_insight(
+    emotion: str, stress: int, recovery: int,
+    transcript: str, cal_data: dict,
+    sleep_data: dict = None,
+    audio_library: list = None,
+    cal_events_full: list = None,
+) -> dict:
+    """Generate Nuo's full structured response using production prompt with REAL data."""
+    from nuo_prompts import SYSTEM_PROMPT, build_user_prompt
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+
+    # Build REAL calendar context from actual events
+    calendar_context = compute_calendar_context(cal_events_full or [], cal_data)
+
+    # Pre-compute urgency tier (stress-driven)
+    urgency_tier, urgency_signals = compute_urgency_tier(stress, recovery, sleep_data)
+
+    # Build real audio library for LLM (use DB tracks, not fake ones)
+    real_audio_lib = audio_library or []
+    if not real_audio_lib:
+        real_audio_lib = [
+            {"audio_id": "aud_df_bin_001", "title": "40Hz Binaural Focus", "label": "Deep Focus", "duration_sec": 600},
+            {"audio_id": "aud_df_bin_002", "title": "Alpha Wave Concentration", "label": "Deep Recovery", "duration_sec": 600},
+            {"audio_id": "aud_df_flo_003", "title": "Flow State Ambient", "label": "High Relaxation", "duration_sec": 600},
+        ]
+
+    sleep = sleep_data or {}
+    context = {
+        "sleep": {
+            "avg_sleep_hours_3d": sleep.get("latest_actual_sleep", None),
+            "avg_sleep_debt_hours_3d": sleep.get("avg_debt_3d", None),
+            "nights": sleep.get("records", []),
         },
+        "calendar": calendar_context,
         "biometrics": {
             "voice_stress_3d_avg_sigma": round(stress / 50, 2),
             "recovery_3d_avg_score": recovery,
@@ -259,13 +402,7 @@ async def generate_insight(
             "last_completed_session": None,
             "baseline_recovery_prev_week": None,
         },
-        "audio_library": audio_library or [
-            {"audio_id": "aud_calm_breath_01", "title": "4-7-8 Breathing", "label": "breathwork", "duration_sec": 600},
-            {"audio_id": "aud_ocean_ambient_01", "title": "Ocean Ambient", "label": "calming", "duration_sec": 600},
-            {"audio_id": "aud_nsdr_body_scan_02", "title": "NSDR Body Scan", "label": "nsdr", "duration_sec": 600},
-            {"audio_id": "aud_forest_01", "title": "Forest Soundscape", "label": "calming", "duration_sec": 600},
-            {"audio_id": "aud_focus_binaural_03", "title": "40Hz Focus", "label": "focus", "duration_sec": 600},
-        ],
+        "audio_library": real_audio_lib,
         "pre_scheduled_intervention": None,
     }
 
@@ -294,7 +431,6 @@ async def generate_insight(
 
         # Extract the 3-part insight for backward compat
         spoken = result.get("spoken_response", "")
-        status = result.get("status_summary", {})
 
         return {
             "feeling": spoken[:200] if spoken else f"Voice stress at {round(stress/50,1)} sigma. Recovery at {recovery}.",

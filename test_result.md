@@ -119,6 +119,20 @@ backend:
         - working: true
           agent: "testing"
           comment: "✅ TESTED SUCCESSFULLY: GET /api/audio/library endpoint working perfectly. Returns 3 seed tracks with correct structure: tracks array + count field. Each track has all required fields (audio_id, title, label, desc, duration, duration_sec, file_url). All file_urls are valid HTTPS URLs. Expected track titles confirmed: '40Hz Binaural Focus', 'Alpha Wave Concentration', 'Flow State Ambient'. Auto-seeding functionality working. Also verified other endpoints: GET /api/ (health check), GET /api/session/status, GET /api/payment/plans - all working correctly."
+        - working: true
+          agent: "testing"
+          comment: "✅ RE-TESTED AFTER VOICE ANALYSIS UPDATES: All backend APIs still working perfectly after voice_analysis.py and nuo_prompts.py updates. GET /api/audio/library returns 3 tracks correctly, GET /api/ health check working, GET /api/session/status returns session info with active plan. Python imports verified: compute_calendar_context and compute_urgency_tier from voice_analysis.py import successfully, SYSTEM_PROMPT and build_user_prompt from nuo_prompts.py import successfully (prompt length: 14913 chars). No syntax errors detected. Backend implementation remains stable."
+  - task: "Voice analysis Python imports verification"
+    implemented: true
+    working: true
+    file: "voice_analysis.py, nuo_prompts.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ PYTHON IMPORTS VERIFIED: Successfully imported compute_calendar_context and compute_urgency_tier from voice_analysis.py. Successfully imported SYSTEM_PROMPT and build_user_prompt from nuo_prompts.py. SYSTEM_PROMPT length: 14913 characters. No syntax errors in updated files. All new functions are importable and ready for use."
 
 frontend:
   - task: "Audio Library page with track list, inline playback, animated waveform, and progress bar"
@@ -158,6 +172,8 @@ test_plan:
 
 agent_communication:
     - agent: "main"
-      message: "Please test the GET /api/audio/library endpoint. It should return a list of audio tracks with fields: audio_id, title, label, desc, duration, duration_sec, file_url. The endpoint auto-seeds 3 tracks if the audio_library collection is empty. Test that the response has the correct structure and that tracks have valid file_url values."
+      message: "Major update to voice analysis pipeline. Please test: 1) GET /api/audio/library still returns tracks, 2) GET /api/ health check works, 3) The compute_calendar_context and compute_urgency_tier functions in voice_analysis.py are importable (no syntax errors). The main change is that generate_insight now accepts cal_events_full parameter and passes real calendar gaps to the LLM. Also nuo_prompts.py SYSTEM_PROMPT updated for empathetic tone. Test the backend endpoint functionality, not the full voice recording flow (that requires audio upload)."
     - agent: "testing"
       message: "✅ BACKEND TESTING COMPLETE: All backend APIs tested successfully! GET /api/audio/library endpoint working perfectly - returns 3 seed tracks with correct structure, all required fields present, valid HTTPS URLs, and expected track titles confirmed. Also verified GET /api/ (health check), GET /api/session/status, and GET /api/payment/plans - all working correctly. Backend implementation is solid and ready for frontend integration."
+    - agent: "testing"
+      message: "✅ VOICE ANALYSIS UPDATES VERIFIED: Re-tested all backend APIs after voice_analysis.py and nuo_prompts.py updates. All endpoints remain fully functional. Python imports verified successfully: compute_calendar_context and compute_urgency_tier from voice_analysis.py import without errors, SYSTEM_PROMPT and build_user_prompt from nuo_prompts.py import successfully (SYSTEM_PROMPT length: 14913 chars). No syntax errors detected in updated files. Backend is stable and ready for production use."

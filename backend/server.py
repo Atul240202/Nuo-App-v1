@@ -393,16 +393,19 @@ async def analyze_voice(audio: UploadFile = File(...), user_id: str = Form("atul
         except:
             pass
 
-        # 10. Generate LLM insight with full context
-        insight = await generate_insight(
-            scores["emotion"], scores["stress_score"], scores["recovery_score"],
-            transcript, cal_data, sleep_data=sleep_data
-        )
-
-        # 10. Score audio library
+        # 10. Generate LLM insight with full context including REAL calendar events
         audio_tracks_raw = await db.audio_library.find({}, {"_id": 0}).to_list(20)
         if not audio_tracks_raw:
             audio_tracks_raw = _get_seed_tracks()
+
+        insight = await generate_insight(
+            scores["emotion"], scores["stress_score"], scores["recovery_score"],
+            transcript, cal_data, sleep_data=sleep_data,
+            audio_library=audio_tracks_raw,
+            cal_events_full=cal_events_full,
+        )
+
+        # 11. Score audio library for ranked display
         ranked_tracks = score_audio_tracks(scores["stress_score"], scores["emotion"], audio_tracks_raw)
 
         return {
