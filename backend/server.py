@@ -186,7 +186,7 @@ async def google_token_auth(request: Request, response: Response):
 @api_router.post("/auth/mock")
 async def mock_auth(request: Request, response: Response):
     """MOCKED: Creates a demo user and session instantly."""
-    mock_email = "nuo.demo@gmail.com"
+    mock_email = "atuljha2402@gmail.com"
     existing = await db.users.find_one({"email": mock_email}, {"_id": 0})
     if not existing:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
