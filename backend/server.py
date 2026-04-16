@@ -424,13 +424,11 @@ async def upload_voice(request: Request):
 
 
 def _get_seed_tracks():
-    """Default audio library if none seeded."""
+    """Default audio library with real audio URLs."""
     return [
-        {"id": "t1", "title": "Deep Ocean Theta", "desc": "4.5Hz binaural + ocean waves", "duration": "10:00", "stress_tag": "high", "emotion_tag": ["stressed", "tense"], "file_url": ""},
-        {"id": "t2", "title": "Forest Rain Reset", "desc": "6Hz theta + rain ambience", "duration": "10:00", "stress_tag": "medium", "emotion_tag": ["tense", "fatigued"], "file_url": ""},
-        {"id": "t3", "title": "Silent Valley", "desc": "5Hz binaural + white noise", "duration": "10:00", "stress_tag": "medium", "emotion_tag": ["neutral", "fatigued"], "file_url": ""},
-        {"id": "t4", "title": "Mountain Dawn", "desc": "7Hz alpha + birdsong", "duration": "10:00", "stress_tag": "low", "emotion_tag": ["positive", "neutral"], "file_url": ""},
-        {"id": "t5", "title": "Midnight Drift", "desc": "3Hz delta + warm noise", "duration": "10:00", "stress_tag": "high", "emotion_tag": ["stressed", "fatigued"], "file_url": ""},
+        {"id": "aud_df_bin_001", "audio_id": "aud_df_bin_001", "title": "40Hz Binaural Focus", "label": "Deep Focus", "desc": "Alpha waves, brain massage while you sleep", "duration": "10:00", "duration_sec": 600, "stress_tag": "medium", "emotion_tag": ["tense", "neutral", "fatigued"], "file_url": "https://pause-v1-audio.sfo3.digitaloceanspaces.com/NY%20Audio%20Interventions/Alpha%20Waves%20Heal%20Damage%20In%20The%20Body%2C%20Brain%20Massage%20While%20You%20Sleep%2C%20Improve%20Your%20Memory%20%5BpxqW0tgb5A%5D.mp3"},
+        {"id": "aud_df_bin_002", "audio_id": "aud_df_bin_002", "title": "Alpha Wave Concentration", "label": "Deep Recovery", "desc": "Hyperfocus mode for deep work and flow", "duration": "10:00", "duration_sec": 600, "stress_tag": "high", "emotion_tag": ["stressed", "tense", "fatigued"], "file_url": "https://pause-v1-audio.sfo3.cdn.digitaloceanspaces.com/NY%20Audio%20Interventions/Focus%20Music%20%E2%80%A2%20Enter%20Hyperfocus%20Mode%20for%20Deep%20Work%20&%20Flow%20%5BE79seWbsZds%5D.mp3"},
+        {"id": "aud_df_flo_003", "audio_id": "aud_df_flo_003", "title": "Flow State Ambient", "label": "High Relaxation", "desc": "Instant relief from stress and anxiety", "duration": "10:00", "duration_sec": 600, "stress_tag": "high", "emotion_tag": ["stressed", "fatigued", "tense"], "file_url": "https://pause-v1-audio.sfo3.cdn.digitaloceanspaces.com/NY%20Audio%20Interventions/Instant%20Relief%20from%20Stress%20and%20Anxiety%20_%20Detox%20Negative%20Emotions,%20Calm%20Nature%20Healing%20Sleep%20Music%E2%98%8558%20%5B79kpoGF8KWU%5D.mp3"},
     ]
 
 

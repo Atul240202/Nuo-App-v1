@@ -220,6 +220,65 @@ export default function VoiceScreen() {
   );
 }
 
+/* ─── AUDIO CARD WITH PLAYBACK ──────────────────── */
+function AudioCard({ track }: { track: any }) {
+  const [playing, setPlaying] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  const togglePlay = async () => {
+    if (playing && soundRef.current) {
+      await soundRef.current.pauseAsync();
+      setPlaying(false);
+      return;
+    }
+
+    try {
+      if (soundRef.current) {
+        await soundRef.current.playAsync();
+        setPlaying(true);
+        return;
+      }
+
+      const url = track.file_url;
+      if (!url) return;
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: url },
+        { shouldPlay: true },
+        (status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setPlaying(false);
+          }
+        }
+      );
+      soundRef.current = sound;
+      setPlaying(true);
+    } catch {}
+  };
+
+  useEffect(() => {
+    return () => { soundRef.current?.unloadAsync(); };
+  }, []);
+
+  return (
+    <View style={[styles.audioCard, track.nuo_pick && styles.audioCardPick]} testID={`reset-${track.rank}`}>
+      {track.nuo_pick && (
+        <View style={styles.nuoPickBadge}><Text style={styles.nuoPickText}>Nuo's pick</Text></View>
+      )}
+      <View style={styles.audioRow}>
+        <TouchableOpacity style={[styles.playBtn, playing && styles.playBtnActive]} onPress={togglePlay} testID={`play-reset-${track.rank}`}>
+          <Ionicons name={playing ? 'pause' : 'play'} size={20} color={C.teal} />
+        </TouchableOpacity>
+        <View style={styles.audioInfo}>
+          <Text style={styles.audioTitle}>{track.title}</Text>
+          <Text style={styles.audioLabel}>{track.label} · {Math.round((track.duration_sec || 600) / 60)} min</Text>
+          {track.pick_reason && <Text style={styles.pickReason}>{track.pick_reason}</Text>}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 /* ─── RESULTS PANEL ────────────────────────────── */
 function ResultsPanel({ result, onReset }: { result: FullResult; onReset: () => void }) {
   const router = useRouter();
@@ -320,21 +379,7 @@ function ResultsPanel({ result, onReset }: { result: FullResult; onReset: () => 
       {/* ── 7: Reset Now + Top 3 Audio ── */}
       <Text style={styles.resetHeading}>Reset Now</Text>
       {resets.map((track) => (
-        <View key={track.rank} style={[styles.audioCard, track.nuo_pick && styles.audioCardPick]} testID={`reset-${track.rank}`}>
-          {track.nuo_pick && (
-            <View style={styles.nuoPickBadge}><Text style={styles.nuoPickText}>Nuo's pick</Text></View>
-          )}
-          <View style={styles.audioRow}>
-            <TouchableOpacity style={styles.playBtn} testID={`play-reset-${track.rank}`}>
-              <Ionicons name="play" size={20} color={C.teal} />
-            </TouchableOpacity>
-            <View style={styles.audioInfo}>
-              <Text style={styles.audioTitle}>{track.title}</Text>
-              <Text style={styles.audioLabel}>{track.label} · {Math.round(track.duration_sec / 60)} min</Text>
-              {track.pick_reason && <Text style={styles.pickReason}>{track.pick_reason}</Text>}
-            </View>
-          </View>
-        </View>
+        <AudioCard key={track.rank} track={track} />
       ))}
 
       {/* Bottom actions */}
@@ -417,6 +462,7 @@ const styles = StyleSheet.create({
   nuoPickText: { fontSize: 9, fontFamily: 'SpaceMono_400Regular', color: '#FFF', letterSpacing: 0.5 },
   audioRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   playBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(0,212,170,0.12)', alignItems: 'center', justifyContent: 'center' },
+  playBtnActive: { backgroundColor: 'rgba(0,212,170,0.25)' },
   audioInfo: { flex: 1 },
   audioTitle: { fontSize: 14, fontFamily: 'Sora_500Medium', color: C.textPrimary },
   audioLabel: { fontSize: 11, fontFamily: 'SpaceMono_400Regular', color: C.textSecondary, marginTop: 2 },

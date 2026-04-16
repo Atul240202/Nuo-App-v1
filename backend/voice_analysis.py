@@ -313,14 +313,15 @@ async def generate_insight(
 
 
 def score_audio_tracks(stress: int, emotion: str, tracks: list) -> list:
-    """Score and rank audio tracks based on stress level and emotion."""
+    """Score and rank audio tracks based on stress level and emotion. Return random subset."""
+    import random
     stress_map = {"low": 30, "medium": 60, "high": 85}
     scored = []
     for track in tracks:
         tag_score = 100 - abs(stress - stress_map.get(track.get("stress_tag", "medium"), 60))
         emotion_tags = track.get("emotion_tag", [])
         emotion_match = 20 if emotion in emotion_tags else 0
-        total = tag_score + emotion_match
+        total = tag_score + emotion_match + random.randint(0, 15)
         scored.append({**track, "_score": total})
 
     scored.sort(key=lambda x: x["_score"], reverse=True)
