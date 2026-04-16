@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, StatusBar, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LIGHT } from '../constants/theme';
+import { NUO_LOGO } from '../constants/nuoLogo';
 import Svg, { Path } from 'react-native-svg';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
@@ -43,9 +44,7 @@ export default function AuthScreen() {
     <View style={styles.container} testID="auth-screen">
       <StatusBar barStyle="dark-content" />
       <View style={styles.content}>
-        <View style={styles.logoMark}>
-          <Text style={styles.logoMarkText}>N</Text>
-        </View>
+        <Image source={{ uri: NUO_LOGO }} style={styles.logoImg} />
 
         <Text style={styles.headline}>Continue to Nuo</Text>
         <Text style={styles.sub}>Securely connect to personalize your recovery</Text>
@@ -77,11 +76,7 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: LIGHT.bg, justifyContent: 'center' },
   content: { alignItems: 'center', paddingHorizontal: 32 },
-  logoMark: {
-    width: 56, height: 56, borderRadius: 16, backgroundColor: LIGHT.text,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 32,
-  },
-  logoMarkText: { fontSize: 28, fontFamily: 'Poppins_700Bold', color: LIGHT.bg },
+  logoImg: { width: 80, height: 80, marginBottom: 32, borderRadius: 40, backgroundColor: '#0A0A14' },
   headline: { fontSize: 26, fontFamily: 'Poppins_700Bold', color: LIGHT.text, marginBottom: 8 },
   sub: { fontSize: 15, fontFamily: 'Inter_400Regular', color: LIGHT.textMuted, textAlign: 'center', marginBottom: 40 },
   googleBtn: {

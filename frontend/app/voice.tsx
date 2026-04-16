@@ -5,7 +5,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Audio } from 'expo-av';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { NUO_ORB_BASE64 } from '../constants/nuoOrb';
+import { NUO_LOGO } from '../constants/nuoLogo';
 
 type NuoState = 'idle' | 'recording' | 'processing' | 'results';
 
@@ -249,7 +249,7 @@ export default function VoiceScreen() {
             ))}
 
             <Animated.View style={[styles.orbContainer, { transform: [{ scale: orbPulse }] }]}>
-              <Image source={{ uri: NUO_ORB_BASE64 }} style={styles.orbImage} testID="nuo-orb" />
+              <Image source={{ uri: NUO_LOGO }} style={styles.orbImage} testID="nuo-orb" />
             </Animated.View>
           </View>
           <Text style={styles.stateText}>

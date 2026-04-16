@@ -408,32 +408,53 @@ function BottomTabBar({ isRecording, onMicPress }: { isRecording: boolean; onMic
   const pulseRing = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Heartbeat: always animate the mic FAB — smooth scale 1→1.25→1 looping
-    const heartbeatLoop = Animated.loop(
+  // Slower, more subtle heartbeat animation - smooth breathing effect
+  const heartbeatLoop = Animated.loop(
+    Animated.sequence([
+      Animated.timing(heartbeat, { 
+        toValue: 2.12, 
+        duration: 2800, 
+        useNativeDriver: true,
+        easing: Easing.inOut(Easing.ease)
+      }),
+      Animated.timing(heartbeat, { 
+        toValue: 1, 
+        duration: 1800, 
+        useNativeDriver: true,
+        easing: Easing.inOut(Easing.ease)
+      }),
+    ])
+  );
+  heartbeatLoop.start();
+
+  if (isRecording) {
+    // Slower pulse ring expand + fade (only when recording)
+    Animated.loop(
       Animated.sequence([
-        Animated.timing(heartbeat, { toValue: 1.25, duration: 600, useNativeDriver: true }),
-        Animated.timing(heartbeat, { toValue: 1, duration: 600, useNativeDriver: true }),
-        Animated.timing(heartbeat, { toValue: 1.18, duration: 500, useNativeDriver: true }),
-        Animated.timing(heartbeat, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(pulseRing, { 
+          toValue: 1, 
+          duration: 5000, 
+          useNativeDriver: true,
+          easing: Easing.out(Easing.ease)
+        }),
+        Animated.timing(pulseRing, { 
+          toValue: 0, 
+          duration: 0, 
+          useNativeDriver: true 
+        }),
       ])
-    );
-    heartbeatLoop.start();
+    ).start();
+  } else {
+    pulseRing.stopAnimation();
+    pulseRing.setValue(0);
+  }
 
-    if (isRecording) {
-      // Pulse ring expand + fade (only when recording)
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseRing, { toValue: 1, duration: 1200, useNativeDriver: true }),
-          Animated.timing(pulseRing, { toValue: 0, duration: 0, useNativeDriver: true }),
-        ])
-      ).start();
-    } else {
-      pulseRing.stopAnimation();
-      pulseRing.setValue(0);
-    }
+  return () => { 
+    heartbeatLoop.stop(); 
+    pulseRing.stopAnimation();
+  };
+}, [isRecording]);
 
-    return () => { heartbeatLoop.stop(); };
-  }, [isRecording]);
 
   const ringScale = pulseRing.interpolate({ inputRange: [0, 1], outputRange: [1, 2] });
   const ringOpacity = pulseRing.interpolate({ inputRange: [0, 0.8, 1], outputRange: [0.5, 0.1, 0] });

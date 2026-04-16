@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, Animated, StyleSheet, TouchableOpacity, StatusBar, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LIGHT } from '../constants/theme';
+import { NUO_LOGO } from '../constants/nuoLogo';
 
 export default function IntroScreen() {
   const router = useRouter();
@@ -28,11 +29,9 @@ export default function IntroScreen() {
     <View style={styles.container} testID="intro-screen">
       <StatusBar barStyle="dark-content" />
 
-      {/* Pulsating blob */}
-      <Animated.View style={[styles.blobOuter, { transform: [{ scale: pulseAnim }], opacity: glowAnim }]}>
-        <LinearGradient colors={['#1A1523', '#2D1F4E', '#1A1523']} style={styles.blobInner}>
-          <View style={styles.blobShimmer} />
-        </LinearGradient>
+      {/* Pulsating logo */}
+      <Animated.View style={[styles.logoWrap, { transform: [{ scale: pulseAnim }], opacity: glowAnim }]}>
+        <Image source={{ uri: NUO_LOGO }} style={styles.logoImg} />
       </Animated.View>
 
       <Animated.View style={[styles.textWrap, { opacity: fadeIn }]}>
@@ -57,16 +56,8 @@ export default function IntroScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: LIGHT.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  blobOuter: {
-    width: 120, height: 120, borderRadius: 60, marginBottom: 40,
-    shadowColor: '#7F00FF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 40, elevation: 10,
-  },
-  blobInner: {
-    width: 120, height: 120, borderRadius: 60, alignItems: 'center', justifyContent: 'center',
-  },
-  blobShimmer: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(157,108,255,0.2)',
-  },
+  logoWrap: { marginBottom: 40 },
+  logoImg: { width: 140, height: 140, borderRadius: 70, backgroundColor: '#0A0A14' },
   textWrap: { alignItems: 'center', marginBottom: 48 },
   headline: { fontSize: 28, fontFamily: 'Poppins_700Bold', color: LIGHT.text, marginBottom: 8 },
   sub: { fontSize: 16, fontFamily: 'Inter_400Regular', color: LIGHT.textMuted, textAlign: 'center', marginBottom: 12 },

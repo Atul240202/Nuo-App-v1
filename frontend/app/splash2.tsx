@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet, ImageBackground, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, Animated, StyleSheet, ImageBackground, TouchableOpacity, StatusBar, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
 import { GRADIENT_BG_BASE64, DARK } from '../constants/theme';
+import { NUO_LOGO } from '../constants/nuoLogo';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const R = 60, CX = 70, CY = 70, CIRC = 2 * Math.PI * R;
@@ -10,7 +11,7 @@ const R = 60, CX = 70, CY = 70, CIRC = 2 * Math.PI * R;
 export default function Splash2Screen() {
   const router = useRouter();
   const breatheAnim = useRef(new Animated.Value(1)).current;
-  const ringAnim = useRef(new Animated.Value(CIRC)).current;
+  const pulseScale = useRef(new Animated.Value(1)).current;
   const glowOpacity = useRef(new Animated.Value(0.4)).current;
   const headOpacity = useRef(new Animated.Value(0)).current;
   const headY = useRef(new Animated.Value(20)).current;
@@ -27,10 +28,10 @@ export default function Splash2Screen() {
       Animated.timing(glowOpacity, { toValue: 0.4, duration: 1000, useNativeDriver: true }),
     ])).start();
 
-    Animated.sequence([
-      Animated.delay(400),
-      Animated.timing(ringAnim, { toValue: 0, duration: 1200, useNativeDriver: false }),
-    ]).start();
+    Animated.loop(Animated.sequence([
+      Animated.timing(pulseScale, { toValue: 1.1, duration: 1500, useNativeDriver: true }),
+      Animated.timing(pulseScale, { toValue: 1, duration: 1500, useNativeDriver: true }),
+    ])).start();
 
     Animated.sequence([
       Animated.delay(900),
@@ -57,12 +58,8 @@ export default function Splash2Screen() {
       </Animated.View>
       <View style={styles.overlay} />
 
-      <Animated.View style={[styles.ringWrapper, { opacity: glowOpacity }]}>
-        <Svg width={140} height={140} viewBox="0 0 140 140">
-          <Circle cx={CX} cy={CY} r={R} stroke="rgba(157,108,255,0.15)" strokeWidth={4} fill="none" />
-          <AnimatedCircle cx={CX} cy={CY} r={R} stroke={DARK.accent} strokeWidth={4} fill="none"
-            strokeDasharray={`${CIRC}`} strokeDashoffset={ringAnim} strokeLinecap="round" rotation="-90" origin={`${CX},${CY}`} />
-        </Svg>
+      <Animated.View style={[styles.logoWrapper, { opacity: glowOpacity, transform: [{ scale: pulseScale }] }]}>
+        <Image source={{ uri: NUO_LOGO }} style={styles.logoImg} />
       </Animated.View>
 
       <Animated.View style={{ opacity: headOpacity, transform: [{ translateY: headY }] }}>
@@ -85,6 +82,8 @@ const styles = StyleSheet.create({
   bgImage: { flex: 1, opacity: 0.7 },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,10,20,0.3)' },
   ringWrapper: { marginBottom: 40 },
+  logoWrapper: { marginBottom: 40 },
+  logoImg: { width: 140, height: 140 },
   headline: { fontSize: 34, fontFamily: 'Poppins_700Bold', color: DARK.text, textAlign: 'center', marginBottom: 12 },
   sub: { fontSize: 16, fontFamily: 'Inter_400Regular', color: DARK.textMuted, textAlign: 'center', maxWidth: 260, lineHeight: 24 },
   skipBtn: { position: 'absolute', bottom: 48, right: 32, paddingHorizontal: 16, paddingVertical: 14, minWidth: 44, minHeight: 44 },
