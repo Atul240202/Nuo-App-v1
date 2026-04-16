@@ -188,10 +188,12 @@ function Header({ name }: { name: string }) {
 }
 
 function CalendarPill() {
+  const router = useRouter();
   return (
-    <TouchableOpacity style={styles.calendarPill} testID="calendar-pill">
+    <TouchableOpacity style={styles.calendarPill} onPress={() => router.push('/calendar')} testID="calendar-pill">
       <Feather name="calendar" size={16} color={COLORS.primary} />
       <Text style={styles.calendarText}>Calendar</Text>
+      <Feather name="chevron-right" size={14} color={COLORS.textBody} />
     </TouchableOpacity>
   );
 }

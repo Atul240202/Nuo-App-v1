@@ -834,6 +834,104 @@ async def get_sleep_debt(email: str = 'atuljha2402@gmail.com'):
     }
 
 
+# ─── Calendar Recalculate ──────────────────────────
+@api_router.post("/calendar/recalculate")
+async def recalculate_calendar(request: Request):
+    """Fetch fresh calendar events, recalculate all metrics, save to MongoDB."""
+    body = await request.json()
+    email = body.get("email", "atuljha2402@gmail.com")
+
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user or not user.get("google_calendar_tokens"):
+        raise HTTPException(status_code=400, detail="Calendar not connected")
+
+    tokens = user["google_calendar_tokens"]
+    access_token = tokens["access_token"]
+
+    # Check if token expired, refresh if needed
+    expires_at = tokens.get("expires_at")
+    if expires_at and isinstance(expires_at, datetime):
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc) and tokens.get("refresh_token"):
+            async with httpx.AsyncClient() as http_client:
+                refresh_resp = await http_client.post(
+                    'https://oauth2.googleapis.com/token',
+                    data={
+                        'client_id': GCAL_CLIENT_ID,
+                        'client_secret': GCAL_CLIENT_SECRET,
+                        'refresh_token': tokens["refresh_token"],
+                        'grant_type': 'refresh_token',
+                    }
+                )
+                refresh_data = refresh_resp.json()
+                if 'access_token' in refresh_data:
+                    access_token = refresh_data["access_token"]
+                    await db.users.update_one(
+                        {"email": email},
+                        {"$set": {
+                            "google_calendar_tokens.access_token": access_token,
+                            "google_calendar_tokens.expires_at": datetime.now(timezone.utc) + timedelta(seconds=refresh_data.get("expires_in", 3600)),
+                        }}
+                    )
+
+    # Fetch today's events
+    now_iso = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0).isoformat()
+    end_iso = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59).isoformat()
+
+    cal_events = []
+    cal_events_full = []
+    async with httpx.AsyncClient() as http_client:
+        ev_resp = await http_client.get(
+            'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+            headers={'Authorization': f'Bearer {access_token}'},
+            params={'timeMin': now_iso, 'timeMax': end_iso, 'singleEvents': 'true', 'orderBy': 'startTime'}
+        )
+        if ev_resp.status_code != 200:
+            error_detail = ev_resp.json().get('error', {}).get('message', 'Failed to fetch')
+            raise HTTPException(status_code=ev_resp.status_code, detail=error_detail)
+
+        for e in ev_resp.json().get('items', []):
+            s = e.get("start", {}).get("dateTime", "")
+            en = e.get("end", {}).get("dateTime", "")
+            if s and en:
+                cal_events.append({"start": s, "end": en})
+                cal_events_full.append({
+                    "title": e.get("summary", "Meeting"),
+                    "start": s,
+                    "end": en,
+                    "attendees": len(e.get("attendees", [])),
+                })
+
+    # Recalculate metrics
+    from voice_analysis import analyse_calendar, compute_calendar_context
+    cal_data = analyse_calendar(cal_events)
+    cal_context = compute_calendar_context(cal_events_full, cal_data)
+
+    # Save to MongoDB
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    await db.calendar_loads.update_one(
+        {"user_id": email, "date": today},
+        {"$set": {
+            **cal_data,
+            "events_summary": cal_context.get("events_summary", []),
+            "gaps": cal_context.get("gaps", []),
+            "first_meeting_starts": cal_context.get("first_meeting_starts", "N/A"),
+            "last_meeting_ends": cal_context.get("last_meeting_ends", "N/A"),
+            "busiest_window": cal_context.get("busiest_window", "N/A"),
+            "timestamp": datetime.now(timezone.utc),
+        }},
+        upsert=True
+    )
+
+    return {
+        "status": "recalculated",
+        "metrics": cal_data,
+        "context": cal_context,
+        "events_count": len(cal_events),
+    }
+
+
 # ─── Audio Library ──────────────────────────────────
 @api_router.get("/audio/library")
 async def get_audio_library():
