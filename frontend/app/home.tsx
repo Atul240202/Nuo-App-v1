@@ -371,21 +371,23 @@ function AutoRecoveries({ items }: { items: any[] }) {
 }
 
 function VentCTA({ isRecording, onPress }: { isRecording: boolean; onPress: () => void }) {
-  const router = useRouter();
   return (
-    <TouchableOpacity activeOpacity={0.9} onPress={() => router.push('/voice')} testID="vent-cta-btn">
+    <TouchableOpacity activeOpacity={0.9} disabled testID="tribe-cta-btn">
       <LinearGradient
-        colors={isRecording ? ['#FF4466', '#CC2244'] : ['#9D4CDD', '#7F00FF']}
+        colors={['#9D4CDD', '#7F00FF']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.ventBanner}
       >
         <View style={styles.ventMicCircle}>
-          <Ionicons name={isRecording ? 'stop' : 'mic-outline'} size={28} color="#FFF" />
+          <Ionicons name="people-outline" size={28} color="#FFF" />
         </View>
         <View style={styles.ventTextCol}>
-          <Text style={styles.ventTitle}>{isRecording ? 'Listening...' : 'Vent with Nuo'}</Text>
-          <Text style={styles.ventSubtitle}>{isRecording ? 'Tap to stop recording' : "Tap to talk — I'm here to listen"}</Text>
+          <Text style={styles.ventTitle}>Find My Tribe</Text>
+          <Text style={styles.ventSubtitle}>Connect with people who get it — coming soon</Text>
+        </View>
+        <View style={styles.comingSoonBadge}>
+          <Text style={styles.comingSoonText}>Soon</Text>
         </View>
       </LinearGradient>
     </TouchableOpacity>
@@ -848,6 +850,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
     color: 'rgba(255,255,255,0.85)',
+  },
+  comingSoonBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  comingSoonText: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#FFF',
+    letterSpacing: 0.5,
   },
   tabBarContainer: {
     flexDirection: 'row',
