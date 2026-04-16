@@ -290,6 +290,33 @@ function ResultsPanel({ result, onReset }: { result: FullResult; onReset: () => 
   const audioTracks = (result as any).audio_tracks || [];
   const [interventionKept, setInterventionKept] = useState<boolean | null>(null);
 
+  const handleKeepIntervention = async () => {
+    setInterventionKept(true);
+    if (sched) {
+      try {
+        await fetch(`${BACKEND_URL}/api/interventions/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'atuljha2402@gmail.com',
+            intervention: sched,
+          }),
+        });
+      } catch {}
+    }
+  };
+
+  const handleCancelIntervention = async () => {
+    setInterventionKept(false);
+    if (sched) {
+      try {
+        await fetch(`${BACKEND_URL}/api/interventions/cancel?email=atuljha2402@gmail.com&start_time=${encodeURIComponent(sched.start_time)}`, {
+          method: 'DELETE',
+        });
+      } catch {}
+    }
+  };
+
   // Data cards
   const stressScore = result.stress_score;
   const recoveryScore = result.recovery_score;
@@ -354,11 +381,11 @@ function ResultsPanel({ result, onReset }: { result: FullResult; onReset: () => 
           </View>
           <Text style={styles.interventionReason}>{sched.reason}</Text>
           <View style={styles.interventionActions}>
-            <TouchableOpacity style={styles.keepBtn} onPress={() => setInterventionKept(true)} testID="keep-intervention-btn">
+            <TouchableOpacity style={styles.keepBtn} onPress={handleKeepIntervention} testID="keep-intervention-btn">
               <Feather name="check" size={16} color="#FFF" />
               <Text style={styles.keepBtnText}>Keep it</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setInterventionKept(false)} testID="cancel-intervention-btn">
+            <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelIntervention} testID="cancel-intervention-btn">
               <Feather name="x" size={16} color={C.textSecondary} />
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>

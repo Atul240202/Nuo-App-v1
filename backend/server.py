@@ -870,6 +870,156 @@ async def clear_subscription(email: str = 'atuljha2402@gmail.com'):
     }
 
 
+# ─── Auto Interventions ────────────────────────────
+@api_router.post("/interventions/save")
+async def save_intervention(request: Request):
+    """Save a scheduled intervention from voice analysis results."""
+    body = await request.json()
+    email = body.get("email", "atuljha2402@gmail.com")
+    intervention = body.get("intervention", {})
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    doc = {
+        "user_id": email,
+        "date": today,
+        "start_time": intervention.get("start_time", ""),
+        "duration_min": intervention.get("duration_min", 10),
+        "audio_id": intervention.get("audio_id", ""),
+        "audio_label": intervention.get("audio_label", ""),
+        "audio_title": intervention.get("audio_title", ""),
+        "reason": intervention.get("reason", ""),
+        "status": "scheduled",
+        "created_at": datetime.now(timezone.utc),
+    }
+
+    result = await db.auto_interventions.insert_one(doc)
+    return {"status": "saved", "id": str(result.inserted_id), "intervention": doc}
+
+
+@api_router.delete("/interventions/cancel")
+async def cancel_intervention(email: str = 'atuljha2402@gmail.com', start_time: str = ''):
+    """Cancel/delete a scheduled intervention."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    query = {"user_id": email, "date": today, "status": "scheduled"}
+    if start_time:
+        query["start_time"] = start_time
+    result = await db.auto_interventions.delete_many(query)
+    return {"status": "cancelled", "deleted": result.deleted_count}
+
+
+@api_router.get("/interventions/today")
+async def get_today_interventions(email: str = 'atuljha2402@gmail.com'):
+    """Get today's scheduled auto interventions."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    interventions = await db.auto_interventions.find(
+        {"user_id": email, "date": today, "status": "scheduled"},
+        {"_id": 0}
+    ).to_list(20)
+    return {"interventions": interventions, "count": len(interventions)}
+
+
+@api_router.post("/interventions/generate")
+async def generate_intervention(request: Request):
+    """Generate a new auto intervention based on calendar gaps and last session data."""
+    body = await request.json()
+    email = body.get("email", "atuljha2402@gmail.com")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # Check if one already exists today
+    existing = await db.auto_interventions.find_one(
+        {"user_id": email, "date": today, "status": "scheduled"}, {"_id": 0}
+    )
+    if existing:
+        return {"intervention": existing, "source": "existing"}
+
+    # Get last voice session for stress context
+    last_session = await db.voice_sessions.find_one(
+        {"user_id": email}, {"_id": 0}
+    )
+    stress = last_session.get("stress_score", 50) if last_session else 50
+    emotion = last_session.get("emotion", "neutral") if last_session else "neutral"
+
+    # Get calendar events to find gaps
+    cal_events = []
+    try:
+        user = await db.users.find_one({"email": email}, {"_id": 0})
+        if user and user.get("google_calendar_tokens"):
+            tokens = user["google_calendar_tokens"]
+            access_token = tokens["access_token"]
+            now_iso = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0).isoformat()
+            end_iso = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59).isoformat()
+            async with httpx.AsyncClient() as http_client:
+                ev_resp = await http_client.get(
+                    'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+                    headers={'Authorization': f'Bearer {access_token}'},
+                    params={'timeMin': now_iso, 'timeMax': end_iso, 'singleEvents': 'true', 'orderBy': 'startTime'}
+                )
+                if ev_resp.status_code == 200:
+                    for e in ev_resp.json().get('items', []):
+                        s = e.get("start", {}).get("dateTime", "")
+                        en = e.get("end", {}).get("dateTime", "")
+                        if s and en:
+                            cal_events.append({"start": s, "end": en})
+    except:
+        pass
+
+    # Find best gap
+    from voice_analysis import analyse_calendar
+    cal_data = analyse_calendar(cal_events)
+
+    # Pick audio based on stress
+    audio_tracks = await db.audio_library.find({}, {"_id": 0}).to_list(10)
+    if not audio_tracks:
+        audio_tracks = _get_seed_tracks()
+
+    # Select best audio
+    picked = audio_tracks[0]
+    if stress >= 60:
+        # Pick calming/recovery track
+        for t in audio_tracks:
+            if 'Relax' in t.get('label', '') or 'Recovery' in t.get('label', ''):
+                picked = t
+                break
+    elif stress < 40:
+        # Pick focus track
+        for t in audio_tracks:
+            if 'Focus' in t.get('label', ''):
+                picked = t
+                break
+
+    # Determine time based on stress level
+    now = datetime.now(timezone.utc)
+    if stress >= 70:
+        # Immediate - within 15 min
+        sched_time = (now + timedelta(minutes=15)).strftime("%-I:%M %p")
+        reason = f"Stress elevated at {stress}. Scheduling immediate recovery session."
+    elif stress >= 45:
+        # Within an hour
+        sched_time = (now + timedelta(minutes=45)).strftime("%-I:%M %p")
+        reason = f"Moderate stress detected. Scheduling session before your next dense block."
+    else:
+        # Later in the day
+        sched_time = (now + timedelta(hours=2)).strftime("%-I:%M %p")
+        reason = "Maintenance session. Numbers are stable — good time to bank recovery."
+
+    intervention = {
+        "user_id": email,
+        "date": today,
+        "start_time": sched_time,
+        "duration_min": 10,
+        "audio_id": picked.get("audio_id", ""),
+        "audio_label": picked.get("label", ""),
+        "audio_title": picked.get("title", ""),
+        "reason": reason,
+        "status": "scheduled",
+        "created_at": datetime.now(timezone.utc),
+    }
+
+    await db.auto_interventions.insert_one(intervention)
+    intervention.pop("_id", None)
+    return {"intervention": intervention, "source": "generated"}
+
+
 # ─── Health check ──────────────────────────────────
 @api_router.get("/")
 async def root():

@@ -40,6 +40,33 @@ export default function HomeScreen() {
   const [recoveryIndex, setRecoveryIndex] = useState(0);
   const [weeklyMomentum, setWeeklyMomentum] = useState(0);
   const [sleepDebt, setSleepDebt] = useState({ avg: 0, latest: 0, cumulative: 0, records: [] as any[] });
+  const [autoRecoveries, setAutoRecoveries] = useState<any[]>([]);
+
+  const fetchAutoRecoveries = async () => {
+    try {
+      // 1. Try fetching today's saved interventions
+      const resp = await fetch(`${BACKEND_URL}/api/interventions/today?email=atuljha2402@gmail.com`);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.interventions && data.interventions.length > 0) {
+          setAutoRecoveries(data.interventions);
+          return;
+        }
+      }
+      // 2. If none, generate a new one
+      const genResp = await fetch(`${BACKEND_URL}/api/interventions/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'atuljha2402@gmail.com' }),
+      });
+      if (genResp.ok) {
+        const genData = await genResp.json();
+        if (genData.intervention) {
+          setAutoRecoveries([genData.intervention]);
+        }
+      }
+    } catch {}
+  };
 
   useEffect(() => {
     (async () => {
@@ -73,6 +100,8 @@ export default function HomeScreen() {
           });
         }
       } catch {}
+      // Fetch auto recoveries
+      await fetchAutoRecoveries();
     })();
   }, []);
 
@@ -127,8 +156,7 @@ export default function HomeScreen() {
           <Header name={userName} />
           <CalendarPill />
           <RecoveryScorecard score={recoveryIndex} momentum={weeklyMomentum} />
-          <RecoveryPlan />
-          {/* <AutoRecoveries /> */}
+          <AutoRecoveries items={autoRecoveries} />
           <HowWeKnowYou sleepDebt={sleepDebt} />
           <VentCTA isRecording={isRecording} onPress={toggleRecording} />
         </ScrollView>
@@ -190,37 +218,6 @@ function RecoveryScorecard({ score, momentum }: { score: number; momentum: numbe
           </View>
         </View>
       </View>
-    </View>
-  );
-}
-
-const RECOVERIES = [
-  { id: '1', icon: 'moon' as const, title: 'Sleep Mode Activated', subtitle: 'Wind-down sounds at 10:30 PM', time: '10:30 PM' },
-  { id: '2', icon: 'volume-2' as const, title: 'Focus Soundscape', subtitle: 'Ambient noise during deep work', time: '2:00 PM' },
-  { id: '3', icon: 'wind' as const, title: 'Breathing Reminder', subtitle: '4-7-8 technique every 2 hours', time: 'Recurring' },
-];
-
-function AutoRecoveries() {
-  return (
-    <View style={styles.sectionContainer} testID="auto-recoveries-section">
-      <View style={styles.sectionHeaderRow}>
-        <Feather name="zap" size={20} color={COLORS.primary} />
-        <Text style={styles.sectionTitle}> Auto Recoveries Today</Text>
-      </View>
-      {RECOVERIES.map((item) => (
-        <View key={item.id} style={styles.recoveryCard} testID={`recovery-card-${item.id}`}>
-          <View style={styles.recoveryIconWrap}>
-            <Feather name={item.icon} size={20} color={COLORS.primary} />
-          </View>
-          <View style={styles.recoveryTextCol}>
-            <Text style={styles.recoveryTitle}>{item.title}</Text>
-            <Text style={styles.recoverySubtitle}>{item.subtitle}</Text>
-          </View>
-          <View style={styles.timeBadge}>
-            <Text style={styles.timeBadgeText}>{item.time}</Text>
-          </View>
-        </View>
-      ))}
     </View>
   );
 }
@@ -290,39 +287,54 @@ const PLAN_ITEMS = [
   { id: '3', title: 'Evening Recovery Walk', time: '6:00 PM' },
 ];
 
-function RecoveryPlan() {
+function AutoRecoveries({ items }: { items: any[] }) {
+  const getIcon = (label: string) => {
+    if (label?.includes('Focus')) return 'headphones' as const;
+    if (label?.includes('Recovery')) return 'moon' as const;
+    if (label?.includes('Relax')) return 'wind' as const;
+    return 'volume-2' as const;
+  };
+
   return (
-    <View style={styles.sectionContainer} testID="recovery-plan-section">
+    <View style={styles.sectionContainer} testID="auto-recoveries-section">
       <View style={styles.planHeaderRow}>
-        <Text style={styles.sectionTitle}>Today's Recovery Plan</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Feather name="zap" size={18} color={COLORS.primary} />
+          <Text style={styles.sectionTitle}>Today's Auto Recoveries</Text>
+        </View>
         <View style={styles.doneBadge}>
-          <Text style={styles.doneBadgeText}>0/3 done</Text>
+          <Text style={styles.doneBadgeText}>{items.length} scheduled</Text>
         </View>
       </View>
-      {PLAN_ITEMS.map((item) => (
-        <View key={item.id} style={styles.planCard} testID={`plan-card-${item.id}`}>
+      {items.length === 0 ? (
+        <View style={styles.planCard}>
           <View style={styles.planIconWrap}>
-            <Feather name="clock" size={18} color={COLORS.primary} />
+            <Feather name="calendar" size={18} color={COLORS.textBody} />
           </View>
           <View style={styles.planTextCol}>
-            <Text style={styles.planTitle}>{item.title}</Text>
-            <Text style={styles.planTime}>{item.time}</Text>
-          </View>
-          <View style={styles.planActions}>
-            <TouchableOpacity style={styles.planActionBtn} testID={`plan-alarm-${item.id}`}>
-              <MaterialCommunityIcons name="alarm" size={18} color={COLORS.textBody} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.planActionBtn} testID={`plan-calendar-${item.id}`}>
-              <MaterialCommunityIcons name="calendar-clock" size={18} color={COLORS.textBody} />
-            </TouchableOpacity>
-            <TouchableOpacity testID={`plan-check-${item.id}`}>
-              <LinearGradient colors={['#9D4CDD', '#7F00FF']} style={styles.checkBtn}>
-                <Feather name="check" size={18} color="#FFF" />
-              </LinearGradient>
-            </TouchableOpacity>
+            <Text style={styles.planTitle}>No interventions yet</Text>
+            <Text style={styles.planTime}>Record a voice session to get personalized scheduling</Text>
           </View>
         </View>
-      ))}
+      ) : (
+        items.map((item: any, idx: number) => (
+          <View key={item.audio_id || idx} style={styles.planCard} testID={`recovery-card-${idx}`}>
+            <View style={styles.planIconWrap}>
+              <Feather name={getIcon(item.audio_label)} size={18} color={COLORS.primary} />
+            </View>
+            <View style={styles.planTextCol}>
+              <Text style={styles.planTitle}>{item.audio_title || 'Scheduled Session'}</Text>
+              <Text style={styles.planTime}>{item.start_time} · {item.duration_min || 10} min</Text>
+              {item.reason ? (
+                <Text style={styles.planReason} numberOfLines={2}>{item.reason}</Text>
+              ) : null}
+            </View>
+            <View style={styles.timeBadge}>
+              <Text style={styles.timeBadgeText}>{item.audio_label || 'Recovery'}</Text>
+            </View>
+          </View>
+        ))
+      )}
     </View>
   );
 }
@@ -751,6 +763,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
     color: COLORS.textBody,
+  },
+  planReason: {
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
+    color: COLORS.textBody,
+    marginTop: 4,
+    fontStyle: 'italic',
+    lineHeight: 16,
   },
   planActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   planActionBtn: {
