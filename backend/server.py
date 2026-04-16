@@ -911,18 +911,45 @@ async def get_progress_summary(period: str = "week", email: str = "atuljha2402@g
             score = round(sum(s.get("recovery_score", 50) for s in month_sessions) / max(1, len(month_sessions))) if month_sessions else 0
             chart_data.append({"day": month_names[target_month - 1], "date": f"{target_year}-{target_month:02d}", "score": score, "is_today": m == 11})
 
-    # Current recovery score (latest or average)
-    current_score = 50
-    if sessions:
-        recent = sessions[-min(5, len(sessions)):]
-        current_score = round(sum(s.get("recovery_score", 50) for s in recent) / len(recent))
+    # Current recovery score — use same logic as /api/recovery-index
+    # (recovery_score / recovery_capacity ratio, 7-day rolling avg)
+    daily_ratios = []
+    for s in sessions:
+        ts = s.get("timestamp")
+        if not ts:
+            continue
+        if isinstance(ts, str):
+            ts = datetime.fromisoformat(ts)
+        day = ts.strftime("%Y-%m-%d")
+        rec_score = s.get("recovery_score", 50)
 
-    # Weekly change
-    if len(sessions) >= 2:
-        first_half = sessions[:len(sessions) // 2]
-        second_half = sessions[len(sessions) // 2:]
-        avg1 = sum(s.get("recovery_score", 50) for s in first_half) / max(1, len(first_half))
-        avg2 = sum(s.get("recovery_score", 50) for s in second_half) / max(1, len(second_half))
+        # Find matching calendar load for capacity
+        cap = 100
+        for cl in cal_loads:
+            if cl.get("date") == day:
+                cap = max(1, cl.get("recovery_capacity_score", 100))
+                break
+
+        ratio = min(100, round((rec_score / cap) * 100))
+        daily_ratios.append({"date": day, "ratio": ratio})
+
+    if daily_ratios:
+        all_ratios = [d["ratio"] for d in daily_ratios]
+        current_score = round(sum(all_ratios) / len(all_ratios))
+    else:
+        # Fallback: derive from sleep data
+        if sleep_records:
+            avg_sleep_hrs = sum(s.get("actual_sleep_hours", 7) for s in sleep_records) / len(sleep_records)
+            current_score = min(100, round(avg_sleep_hrs / 8 * 75))
+        else:
+            current_score = 50
+
+    # Weekly change — compare first half vs second half of ratios
+    if len(daily_ratios) >= 2:
+        first_half = daily_ratios[:len(daily_ratios) // 2]
+        second_half = daily_ratios[len(daily_ratios) // 2:]
+        avg1 = sum(d["ratio"] for d in first_half) / max(1, len(first_half))
+        avg2 = sum(d["ratio"] for d in second_half) / max(1, len(second_half))
         weekly_change = round(((avg2 - avg1) / max(1, avg1)) * 100, 1)
     else:
         weekly_change = 0
