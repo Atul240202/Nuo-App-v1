@@ -352,10 +352,27 @@ async def analyze_voice(audio: UploadFile = File(...), user_id: str = Form("atul
             upsert=True
         )
 
-        # 9. Generate LLM insight
+        # 9. Fetch sleep data for LLM context
+        sleep_data = {}
+        try:
+            sleep_records = await db.sleep_debt.find(
+                {"user_id": user_id}, {"_id": 0}
+            ).sort("date", -1).to_list(3)
+            if sleep_records:
+                sleep_records.reverse()
+                sleep_data = {
+                    "avg_debt_3d": round(sum(r.get("debt_hours", 0) for r in sleep_records) / len(sleep_records), 1),
+                    "latest_actual_sleep": sleep_records[-1].get("actual_sleep_hours", 0),
+                    "cumulative_debt": sleep_records[-1].get("cumulative_debt_hours", 0),
+                    "records": sleep_records,
+                }
+        except:
+            pass
+
+        # 10. Generate LLM insight with full context
         insight = await generate_insight(
             scores["emotion"], scores["stress_score"], scores["recovery_score"],
-            transcript, cal_data
+            transcript, cal_data, sleep_data=sleep_data
         )
 
         # 10. Score audio library

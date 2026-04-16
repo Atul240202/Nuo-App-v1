@@ -221,66 +221,94 @@ def analyse_calendar(events: list) -> dict:
 
 async def generate_insight(
     emotion: str, stress: int, recovery: int,
-    transcript: str, cal_data: dict
+    transcript: str, cal_data: dict,
+    sleep_data: dict = None,
+    audio_library: list = None,
 ) -> dict:
-    """Generate Nuo's 3-part insight using GPT-4o via Emergent key."""
+    """Generate Nuo's full structured response using production prompt."""
+    from nuo_prompts import SYSTEM_PROMPT, build_user_prompt
+
     api_key = os.environ.get("EMERGENT_LLM_KEY", "")
 
-    system_prompt = """You are Nuo — a grounded, emotionally intelligent system.
-You produce exactly 3 fields in JSON. No markdown. No affirmations. No toxic positivity.
-Just clear observation + honest framing + one concrete action.
+    # Build context for the production prompt
+    sleep = sleep_data or {}
+    context = {
+        "sleep": {
+            "avg_sleep_hours_3d": sleep.get("latest_actual_sleep", None),
+            "avg_sleep_debt_hours_3d": sleep.get("avg_debt_3d", None),
+            "nights": sleep.get("records", []),
+        },
+        "calendar": {
+            "total_meetings": cal_data.get("meetings_count", 0),
+            "back_to_back_meetings": cal_data.get("back_to_back", 0),
+            "first_meeting_starts": "N/A",
+            "last_meeting_ends": "N/A",
+            "busiest_window": "N/A",
+            "gaps": [],
+            "events_summary": [],
+        },
+        "biometrics": {
+            "voice_stress_3d_avg_sigma": round(stress / 50, 2),
+            "recovery_3d_avg_score": recovery,
+            "detected_emotion": emotion,
+            "linguistic_markers": {},
+        },
+        "intervention_history": {
+            "total_sessions_30d": 0,
+            "per_label_stats": {},
+            "last_completed_session": None,
+            "baseline_recovery_prev_week": None,
+        },
+        "audio_library": audio_library or [
+            {"audio_id": "aud_calm_breath_01", "title": "4-7-8 Breathing", "label": "breathwork", "duration_sec": 600},
+            {"audio_id": "aud_ocean_ambient_01", "title": "Ocean Ambient", "label": "calming", "duration_sec": 600},
+            {"audio_id": "aud_nsdr_body_scan_02", "title": "NSDR Body Scan", "label": "nsdr", "duration_sec": 600},
+            {"audio_id": "aud_forest_01", "title": "Forest Soundscape", "label": "calming", "duration_sec": 600},
+            {"audio_id": "aud_focus_binaural_03", "title": "40Hz Focus", "label": "focus", "duration_sec": 600},
+        ],
+        "pre_scheduled_intervention": None,
+    }
 
-IMPORTANT: The user may speak in Indian languages including Hindi, Marathi, Kannada, Gujarati, or Tamil.
-- If the transcript is in any Indian language, understand it natively — do NOT ask for translation.
-- Always respond in English regardless of the input language.
-- Understand cultural context, idioms, and emotional expressions specific to Indian languages.
-
-Return ONLY valid JSON with these 3 keys:
-- "feeling": 1 sentence describing what you observe in their voice/state. Grounded. No cheerleading.
-- "why": 1-2 sentences connecting the voice data to the calendar pattern. Use the numbers.
-- "actions": 1 sentence framing why a binaural audio session would help right now. Not listing options."""
-
-    user_prompt = f"""Voice analysis results:
-- Emotion detected: {emotion}
-- Stress score: {stress}/100
-- Recovery score: {recovery}/100
-- Transcript: "{transcript}"
-
-Calendar metrics today:
-- Meetings: {cal_data.get('meetings_count', 0)}
-- Back-to-back: {cal_data.get('back_to_back', 0)}
-- Average gap: {cal_data.get('avg_gap_mins', 'N/A')} minutes
-- Meeting load score: {cal_data.get('meeting_load_score', 0)}/100
-- Recovery capacity: {cal_data.get('recovery_capacity_score', 100)}/100
-
-Generate the 3-part JSON insight. Return ONLY the JSON object, no other text."""
+    user_prompt = build_user_prompt(
+        user_text_original=transcript,
+        user_text_english=transcript,
+        user_language="en",
+        context=context,
+    )
 
     try:
         chat = LlmChat(
             api_key=api_key,
-            session_id=f"nuo-insight-{uuid.uuid4().hex[:8]}",
-            system_message=system_prompt,
+            session_id=f"nuo-{uuid.uuid4().hex[:8]}",
+            system_message=SYSTEM_PROMPT,
         ).with_model("openai", "gpt-4o")
 
         response = await chat.send_message(UserMessage(text=user_prompt))
 
-        # Parse JSON from response
+        # Parse JSON
         text = response.strip()
         if text.startswith("```"):
             text = text.split("\n", 1)[1] if "\n" in text else text[3:]
             text = text.rsplit("```", 1)[0]
         result = json.loads(text)
+
+        # Extract the 3-part insight for backward compat
+        spoken = result.get("spoken_response", "")
+        status = result.get("status_summary", {})
+
         return {
-            "feeling": result.get("feeling", ""),
-            "why": result.get("why", ""),
-            "actions": result.get("actions", ""),
+            "feeling": spoken[:200] if spoken else f"Voice stress at {round(stress/50,1)} sigma. Recovery at {recovery}.",
+            "why": result.get("status_summary", {}).get("assessment", "stable"),
+            "actions": result.get("next_checkin", ""),
+            "full_response": result,
         }
     except Exception as e:
         logger.error(f"LLM insight error: {e}")
         return {
-            "feeling": f"Your voice suggests {emotion} energy with a stress level of {stress}%.",
-            "why": f"With {cal_data.get('meetings_count', 0)} meetings and limited gaps, your system hasn't had space to decompress.",
+            "feeling": f"Voice stress elevated. Recovery at {recovery}. {cal_data.get('meetings_count', 0)} meetings today.",
+            "why": f"Sleep debt at {sleep.get('avg_debt_3d', 'unknown')} hours avg over 3 days.",
             "actions": "A targeted binaural session could help your nervous system find the reset it needs.",
+            "full_response": None,
         }
 
 
