@@ -127,9 +127,9 @@ export default function HomeScreen() {
           <Header name={userName} />
           <CalendarPill />
           <RecoveryScorecard score={recoveryIndex} momentum={weeklyMomentum} />
-          <AutoRecoveries />
-          <HowWeKnowYou sleepDebt={sleepDebt} />
           <RecoveryPlan />
+          {/* <AutoRecoveries /> */}
+          <HowWeKnowYou sleepDebt={sleepDebt} />
           <VentCTA isRecording={isRecording} onPress={toggleRecording} />
         </ScrollView>
         <BottomTabBar isRecording={isRecording} onMicPress={toggleRecording} />
