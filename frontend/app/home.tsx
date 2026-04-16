@@ -41,6 +41,7 @@ export default function HomeScreen() {
   const [weeklyMomentum, setWeeklyMomentum] = useState(0);
   const [sleepDebt, setSleepDebt] = useState({ avg: 0, latest: 0, cumulative: 0, records: [] as any[] });
   const [autoRecoveries, setAutoRecoveries] = useState<any[]>([]);
+  const [homeMetrics, setHomeMetrics] = useState({ back_to_back: 0, meetings_count: 0, avg_stress_3d: 0, stress_sessions_count: 0 });
 
   const fetchAutoRecoveries = async () => {
     try {
@@ -102,6 +103,14 @@ export default function HomeScreen() {
       } catch {}
       // Fetch auto recoveries
       await fetchAutoRecoveries();
+      // Fetch home metrics (back-to-back, voice stress avg)
+      try {
+        const resp = await fetch(`${BACKEND_URL}/api/metrics/home?email=atuljha2402@gmail.com`);
+        if (resp.ok) {
+          const data = await resp.json();
+          setHomeMetrics(data);
+        }
+      } catch {}
     })();
   }, []);
 
@@ -157,7 +166,7 @@ export default function HomeScreen() {
           <CalendarPill />
           <RecoveryScorecard score={recoveryIndex} momentum={weeklyMomentum} />
           <AutoRecoveries items={autoRecoveries} />
-          <HowWeKnowYou sleepDebt={sleepDebt} />
+          <HowWeKnowYou sleepDebt={sleepDebt} homeMetrics={homeMetrics} />
           <VentCTA isRecording={isRecording} onPress={toggleRecording} />
         </ScrollView>
         <BottomTabBar isRecording={isRecording} onMicPress={toggleRecording} />
@@ -224,10 +233,7 @@ function RecoveryScorecard({ score, momentum }: { score: number; momentum: numbe
   );
 }
 
-const METRICS = [
-  { id: '2', icon: 'moon', title: 'Sleep', value: '7.2 hrs', label: 'Last night', color: '#7F00FF' },
-  { id: '3', icon: 'activity', title: 'Stress Level', value: 'Low', label: 'HRV based', color: '#7F00FF' },
-];
+const METRICS = [];
 
 interface SleepData {
   avg: number;
@@ -236,9 +242,24 @@ interface SleepData {
   records: any[];
 }
 
-function HowWeKnowYou({ sleepDebt }: { sleepDebt: SleepData }) {
+interface HomeMetrics {
+  back_to_back: number;
+  meetings_count: number;
+  avg_stress_3d: number;
+  stress_sessions_count: number;
+}
+
+function HowWeKnowYou({ sleepDebt, homeMetrics }: { sleepDebt: SleepData; homeMetrics: HomeMetrics }) {
   const debtLevel = sleepDebt.avg >= 4 ? 'Critical' : sleepDebt.avg >= 2 ? 'High' : 'Normal';
   const debtColor = sleepDebt.avg >= 4 ? '#E53E3E' : sleepDebt.avg >= 2 ? '#DD6B20' : '#38A169';
+
+  // Back-to-back color
+  const b2bColor = homeMetrics.back_to_back >= 3 ? '#E53E3E' : homeMetrics.back_to_back >= 1 ? '#DD6B20' : '#38A169';
+
+  // Voice stress color
+  const stressAvg = homeMetrics.avg_stress_3d;
+  const stressColor = stressAvg >= 70 ? '#E53E3E' : stressAvg >= 45 ? '#DD6B20' : '#38A169';
+  const stressLabel = stressAvg >= 70 ? 'High' : stressAvg >= 45 ? 'Moderate' : 'Low';
 
   return (
     <View style={styles.sectionContainer} testID="how-we-know-you-section">
@@ -267,17 +288,25 @@ function HowWeKnowYou({ sleepDebt }: { sleepDebt: SleepData }) {
           </View>
         </View>
 
-        {/* Other metric cards */}
-        {METRICS.map((m) => (
-          <View key={m.id} style={styles.metricCard} testID={`metric-card-${m.id}`}>
-            <View style={styles.metricIconWrap}>
-              <Feather name={m.icon as any} size={20} color={m.color} />
-            </View>
-            <Text style={styles.metricLabel}>{m.title}</Text>
-            <Text style={styles.metricValue}>{m.value}</Text>
-            <Text style={styles.metricSub}>{m.label}</Text>
+        {/* Back-to-Back Meetings Card */}
+        <View style={styles.metricCard} testID="b2b-meetings-card">
+          <View style={[styles.metricIconWrap, { backgroundColor: b2bColor + '18' }]}>
+            <Feather name="users" size={20} color={b2bColor} />
           </View>
-        ))}
+          <Text style={styles.metricLabel}>Back-to-Back</Text>
+          <Text style={[styles.metricValue, { color: b2bColor }]}>{homeMetrics.back_to_back}</Text>
+          <Text style={styles.metricSub}>today · {homeMetrics.meetings_count} total</Text>
+        </View>
+
+        {/* Voice Stress 3-Day Avg Card */}
+        <View style={styles.metricCard} testID="voice-stress-card">
+          <View style={[styles.metricIconWrap, { backgroundColor: stressColor + '18' }]}>
+            <Feather name="activity" size={20} color={stressColor} />
+          </View>
+          <Text style={styles.metricLabel}>Voice Stress</Text>
+          <Text style={[styles.metricValue, { color: stressColor }]}>{stressAvg}</Text>
+          <Text style={styles.metricSub}>{stressLabel} · 3d avg</Text>
+        </View>
       </View>
     </View>
   );

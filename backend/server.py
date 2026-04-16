@@ -835,6 +835,41 @@ async def get_sleep_debt(email: str = 'atuljha2402@gmail.com'):
 
 
 # ─── Calendar Recalculate ──────────────────────────
+@api_router.get("/metrics/home")
+async def get_home_metrics(email: str = 'atuljha2402@gmail.com'):
+    """Return home screen metrics: back-to-back meetings today + 3-day voice stress avg."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # Back-to-back meetings from calendar_loads
+    back_to_back = 0
+    meetings_count = 0
+    cal_load = await db.calendar_loads.find_one(
+        {"user_id": email, "date": today}, {"_id": 0}
+    )
+    if cal_load:
+        back_to_back = cal_load.get("back_to_back", 0)
+        meetings_count = cal_load.get("meetings_count", 0)
+
+    # 3-day rolling avg voice stress score
+    three_days_ago = datetime.now(timezone.utc) - timedelta(days=3)
+    sessions = await db.voice_sessions.find(
+        {"user_id": email, "timestamp": {"$gte": three_days_ago}},
+        {"_id": 0, "stress_score": 1, "timestamp": 1}
+    ).sort("timestamp", -1).to_list(50)
+
+    avg_stress_3d = 0
+    if sessions:
+        total = sum(s.get("stress_score", 0) for s in sessions)
+        avg_stress_3d = round(total / len(sessions))
+
+    return {
+        "back_to_back": back_to_back,
+        "meetings_count": meetings_count,
+        "avg_stress_3d": avg_stress_3d,
+        "stress_sessions_count": len(sessions),
+    }
+
+
 @api_router.post("/calendar/recalculate")
 async def recalculate_calendar(request: Request):
     """Fetch fresh calendar events, recalculate all metrics, save to MongoDB."""
