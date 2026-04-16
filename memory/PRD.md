@@ -27,6 +27,9 @@ Premium mobile onboarding + voice interaction flow for Nuo, an "Automatic Nervou
 ### Home
 10. **Home** (/home) - Full wellness dashboard
 
+### Audio Library
+11. **Audio Library** (/audio-library) - Dedicated page for all binaural/healing audio tracks. Accessible from "My Favs" tab. Features inline playback, animated waveform visualizer when playing, progress bar with seek, pull-to-refresh.
+
 ## Tech Stack
 - **Frontend**: React Native (Expo SDK 54), expo-router, Animated API
 - **Backend**: FastAPI + MongoDB
