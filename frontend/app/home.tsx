@@ -441,6 +441,7 @@ function BottomTabBar({ isRecording, onMicPress }: { isRecording: boolean; onMic
   const handleTabPress = (tabId: string) => {
     if (tabId === 'favs') router.push('/audio-library');
     if (tabId === 'you') router.push('/profile');
+    if (tabId === 'progress') router.push('/progress');
     // home is current page — do nothing
   };
 
