@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LIGHT } from '../constants/theme';
 import Svg, { Path } from 'react-native-svg';
 
-const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID;
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 function GoogleGIcon() {
@@ -24,72 +23,20 @@ export default function AuthScreen() {
 
   const handleGoogleAuth = async () => {
     setLoading(true);
-
-    if (Platform.OS === 'web') {
-      // Web: Direct Google OAuth redirect (avoids cross-origin iframe issues)
-      try {
-        const redirectUri = window.location.origin + '/auth-callback';
-        const authUrl =
-          'https://accounts.google.com/o/oauth2/v2/auth' +
-          `?client_id=${encodeURIComponent(GOOGLE_CLIENT_ID || '')}` +
-          `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-          '&response_type=token' +
-          '&scope=email%20profile' +
-          '&prompt=select_account';
-        window.location.href = authUrl;
-      } catch {
-        setLoading(false);
-      }
-    } else {
-      // Mobile: Use expo-web-browser to open Google OAuth
-      try {
-        const WebBrowser = require('expo-web-browser');
-        const AuthSession = require('expo-auth-session');
-        const redirectUri = AuthSession.makeRedirectUri({ scheme: 'frontend' });
-        const authUrl =
-          'https://accounts.google.com/o/oauth2/v2/auth' +
-          `?client_id=${encodeURIComponent(GOOGLE_CLIENT_ID || '')}` +
-          `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-          '&response_type=token' +
-          '&scope=email%20profile' +
-          '&prompt=select_account';
-
-        const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-        if (result.type === 'success' && result.url) {
-          const match = result.url.match(/access_token=([^&]+)/);
-          if (match) {
-            await sendTokenToBackend(match[1]);
-            return;
-          }
-        }
-        setLoading(false);
-      } catch {
-        setLoading(false);
-      }
-    }
-  };
-
-  const sendTokenToBackend = async (accessToken: string) => {
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/auth/google`, {
+      // MOCKED: Create mock user session on backend
+      const resp = await fetch(`${BACKEND_URL}/api/auth/mock`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ access_token: accessToken }),
       });
       if (resp.ok) {
-        const data = await resp.json();
-        try {
-          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-          if (data.session_token) await AsyncStorage.setItem('session_token', data.session_token);
-        } catch {}
         router.replace('/intro');
-      } else {
-        setLoading(false);
+        return;
       }
-    } catch {
-      setLoading(false);
-    }
+    } catch {}
+    // Fallback: just navigate
+    setTimeout(() => router.replace('/intro'), 500);
   };
 
   return (

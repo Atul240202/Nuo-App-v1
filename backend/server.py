@@ -182,6 +182,40 @@ async def google_token_auth(request: Request, response: Response):
 
 
 
+# ─── Mock Auth (for development) ───────────────────
+@api_router.post("/auth/mock")
+async def mock_auth(request: Request, response: Response):
+    """MOCKED: Creates a demo user and session instantly."""
+    mock_email = "nuo.demo@gmail.com"
+    existing = await db.users.find_one({"email": mock_email}, {"_id": 0})
+    if not existing:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one({
+            "user_id": user_id,
+            "email": mock_email,
+            "name": "Nuo User",
+            "picture": "",
+            "personalization": None,
+            "calendar_synced": False,
+            "created_at": datetime.now(timezone.utc),
+        })
+    else:
+        user_id = existing["user_id"]
+
+    session_token = f"st_{uuid.uuid4().hex}"
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.update_one(
+        {"user_id": user_id},
+        {"$set": {"session_token": session_token, "expires_at": expires_at, "created_at": datetime.now(timezone.utc)}},
+        upsert=True
+    )
+
+    response.set_cookie(key="session_token", value=session_token, httponly=True, secure=True, samesite="none", path="/", max_age=7*24*3600)
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return {"user": user, "session_token": session_token}
+
+
+
 @api_router.get("/auth/me")
 async def get_me(request: Request):
     token = request.cookies.get("session_token")
