@@ -1,56 +1,43 @@
-# Nuos Wellness App - PRD
+# Nuo - Automatic Nervous Regulation Layer - PRD
 
 ## Overview
-A React Native (Expo) wellness/recovery app called "Nuos" with animated splash screens, onboarding flow, OAuth sign-in, and a full home screen. UI-only implementation with hardcoded placeholder data.
+Premium mobile onboarding + voice interaction flow for Nuo, an "Automatic Nervous Regulation Layer" that autonomously detects and regulates nervous system dysregulation using binaural audio interventions.
 
 ## Navigation Flow
-`/ (Splash1)` → auto 3.5s → `/splash2` → auto 3.8s → `/onboarding` → "Get Started" → `/google-oauth` → sign in → `/home`
+`/ (Logo)` → 4.5s → `/splash1` → 4s → `/splash2` → 4s → `/auth` → Google OAuth → `/auth-callback` → `/intro` → `/personalization` (6 steps) → `/transition` → `/voice` → `/home`
 
 ## Screens
 
-### 1. SplashScreen1 (index.tsx - /)
-- Animated background color transition (#EDE0EA → #F7F0F5)
-- Gradient logo (purple circle with wave SVG)
-- Staggered text animations: "Built for high performers", "who need to recover fast", italic subtitle
-- Auto-navigates to /splash2 after 3500ms
+### Dark Theme (Logo + Splashes + Voice)
+- **Background**: Base64-embedded gradient image (coral→purple→blue) with breathing pulse animation
+- **Overlay**: Semi-transparent dark for readability
 
-### 2. SplashScreen2 (splash2.tsx - /splash2)
-- Animated SVG ring stroke drawing (1200ms)
-- Pulsing glow effect (looping opacity)
-- "Without stopping" title with slide-up animation
-- Skip button → /onboarding
-- Auto-navigates to /onboarding after 3800ms
+1. **Logo Screen** (/) - Nuo logo, "Automatic Nervous Regulation Layer", "Works even when you do nothing"
+2. **Splash1** (/splash1) - "Built for high performers" / "who need to recover fast" / italic subtitle
+3. **Splash2** (/splash2) - Animated SVG ring, "Without stopping", "We handle the recovery while you keep going"
+4. **Voice Screen** (/voice) - Siri-like pulsating orb, real microphone recording, idle/listening/processing states
 
-### 3. OnboardingScreen (onboarding.tsx - /onboarding)
-- 3 state-based slides with fade transitions
-- Slide 1: ⚡ Track your recovery (purple bg)
-- Slide 2: 🎯 Stay on your goals (pink bg)
-- Slide 3: 🚀 Perform without limits (light bg)
-- Animated dot indicators, Next/Get Started button
-- Skip jumps to last slide
+### Light Theme (Auth + Personalization)
+5. **Auth** (/auth) - Real Emergent-managed Google OAuth, "Continue to Nuo"
+6. **Auth Callback** (/auth-callback) - Processes session_id, creates/updates user in DB
+7. **Intro** (/intro) - "Meet Nuo", pulsating dark blob, "Get Started" CTA
+8. **Personalization** (/personalization) - 6-step flow: Name, Age, Gender (with "Calibrating..." micro-feedback), Profession, Role, Calendar Sync
+9. **Transition** (/transition) - "You're all set" → auto-nav to voice
 
-### 4. GoogleOAuthScreen (google-oauth.tsx - /google-oauth)
-- Wave logo, "Welcome back" title
-- Google sign-in button (4-color G SVG icon)
-- Apple sign-in button (dark bg, Apple icon)
-- Loading states with ActivityIndicator (MOCKED 1500ms)
-- Terms & Privacy links with Alert
-- Navigates to /home on sign-in
-
-### 5. HomeScreen (home.tsx - /home)
-- Header (Hi, Sarah 👋), Bluetooth/Help icons
-- Calendar pill, Recovery Index scorecard (78/100 SVG ring)
-- Auto Recoveries list, How We Know You metrics
-- Today's Recovery Plan tasks, Vent with Nuo CTA
-- Bottom tab bar with floating mic FAB
+### Home
+10. **Home** (/home) - Full wellness dashboard
 
 ## Tech Stack
 - **Frontend**: React Native (Expo SDK 54), expo-router, Animated API
-- **Fonts**: @expo-google-fonts/poppins (headings), @expo-google-fonts/inter (body)
+- **Backend**: FastAPI + MongoDB
+- **Auth**: Emergent-managed Google OAuth
+- **Audio**: expo-av for mic recording
+- **Fonts**: Poppins (headings), Inter (body)
 - **Gradients**: expo-linear-gradient
-- **SVG**: react-native-svg (circular progress, Google G logo, wave logo)
-- **Icons**: @expo/vector-icons (Feather, Ionicons, MaterialCommunityIcons)
+- **SVG**: react-native-svg
 
-## Theme
-- Background: #F7F0F5, Primary: #7F00FF, Cards: #FFFFFF
-- Text: #2A1F3D (heading), #6E6A7C (body), #7A7085 (muted)
+## Integrations
+- **Emergent Google OAuth** - Real authentication flow
+- **Microphone** - Real mic permissions + audio recording via expo-av
+- **Calendar** - UI built, backend endpoint ready (needs Google Calendar API credentials for full integration)
+- **Voice Upload** - Backend endpoint receives recording metadata (MOCKED processing)
