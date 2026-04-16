@@ -408,31 +408,31 @@ function BottomTabBar({ isRecording, onMicPress }: { isRecording: boolean; onMic
   const pulseRing = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Heartbeat: always animate the mic FAB — smooth scale 1→1.25→1 looping
+    const heartbeatLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(heartbeat, { toValue: 1.25, duration: 600, useNativeDriver: true }),
+        Animated.timing(heartbeat, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(heartbeat, { toValue: 1.18, duration: 500, useNativeDriver: true }),
+        Animated.timing(heartbeat, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ])
+    );
+    heartbeatLoop.start();
+
     if (isRecording) {
-      // Heartbeat: smooth scale 1→1.25→1 looping
+      // Pulse ring expand + fade (only when recording)
       Animated.loop(
         Animated.sequence([
-          Animated.timing(heartbeat, { toValue: 1.25, duration: 600, useNativeDriver: true }),
-          Animated.timing(heartbeat, { toValue: 1, duration: 600, useNativeDriver: true }),
-          Animated.timing(heartbeat, { toValue: 1.18, duration: 500, useNativeDriver: true }),
-          Animated.timing(heartbeat, { toValue: 1, duration: 500, useNativeDriver: true }),
-        ])
-      ).start();
-      // Pulse ring expand + fade
-      Animated.loop(
-        Animated.sequence([
-          Animated.parallel([
-            Animated.timing(pulseRing, { toValue: 1, duration: 1200, useNativeDriver: true }),
-          ]),
+          Animated.timing(pulseRing, { toValue: 1, duration: 1200, useNativeDriver: true }),
           Animated.timing(pulseRing, { toValue: 0, duration: 0, useNativeDriver: true }),
         ])
       ).start();
     } else {
-      heartbeat.stopAnimation();
       pulseRing.stopAnimation();
-      Animated.timing(heartbeat, { toValue: 1, duration: 200, useNativeDriver: true }).start();
       pulseRing.setValue(0);
     }
+
+    return () => { heartbeatLoop.stop(); };
   }, [isRecording]);
 
   const ringScale = pulseRing.interpolate({ inputRange: [0, 1], outputRange: [1, 2] });
