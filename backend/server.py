@@ -325,6 +325,7 @@ async def analyze_voice(audio: UploadFile = File(...), user_id: str = Form("atul
 
         # 5. Fetch calendar events
         cal_events = []
+        cal_events_full = []
         try:
             user = await db.users.find_one({"email": user_id}, {"_id": 0})
             if user and user.get("google_calendar_tokens"):
@@ -339,8 +340,17 @@ async def analyze_voice(audio: UploadFile = File(...), user_id: str = Form("atul
                         params={'timeMin': now_iso, 'timeMax': end_iso, 'singleEvents': 'true', 'orderBy': 'startTime'}
                     )
                     if ev_resp.status_code == 200:
-                        cal_events = ev_resp.json().get('items', [])
-                        cal_events = [{"start": e.get("start",{}).get("dateTime",""), "end": e.get("end",{}).get("dateTime","")} for e in cal_events]
+                        raw_items = ev_resp.json().get('items', [])
+                        for e in raw_items:
+                            s = e.get("start", {}).get("dateTime", "")
+                            en = e.get("end", {}).get("dateTime", "")
+                            cal_events.append({"start": s, "end": en})
+                            cal_events_full.append({
+                                "title": e.get("summary", "Meeting"),
+                                "start": s,
+                                "end": en,
+                                "attendees": len(e.get("attendees", [])),
+                            })
         except Exception as e:
             logger.error(f"Calendar fetch error: {e}")
 
@@ -819,6 +829,23 @@ async def get_sleep_debt(email: str = 'atuljha2402@gmail.com'):
         "latest_actual_sleep": latest_actual,
         "cumulative_debt": cumulative,
     }
+
+
+# ─── Audio Library ──────────────────────────────────
+@api_router.get("/audio/library")
+async def get_audio_library():
+    """Return all audio tracks from the library."""
+    tracks = await db.audio_library.find({}, {"_id": 0}).to_list(50)
+    if not tracks:
+        tracks = _get_seed_tracks()
+        # Seed them into DB for persistence
+        for t in tracks:
+            await db.audio_library.update_one(
+                {"audio_id": t["audio_id"]},
+                {"$set": t},
+                upsert=True
+            )
+    return {"tracks": tracks, "count": len(tracks)}
 
 
 # ─── Health check ──────────────────────────────────

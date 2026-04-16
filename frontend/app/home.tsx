@@ -393,6 +393,11 @@ function BottomTabBar({ isRecording, onMicPress }: { isRecording: boolean; onMic
   const ringScale = pulseRing.interpolate({ inputRange: [0, 1], outputRange: [1, 2] });
   const ringOpacity = pulseRing.interpolate({ inputRange: [0, 0.8, 1], outputRange: [0.5, 0.1, 0] });
 
+  const handleTabPress = (tabId: string) => {
+    if (tabId === 'favs') router.push('/audio-library');
+    // home is current page — do nothing
+  };
+
   return (
     <View style={styles.tabBarContainer} testID="bottom-tab-bar">
       {TABS.map((tab) => {
@@ -420,7 +425,7 @@ function BottomTabBar({ isRecording, onMicPress }: { isRecording: boolean; onMic
           );
         }
         return (
-          <TouchableOpacity key={tab.id} style={styles.tabItem} testID={`tab-${tab.id}-btn`}>
+          <TouchableOpacity key={tab.id} style={styles.tabItem} onPress={() => handleTabPress(tab.id)} testID={`tab-${tab.id}-btn`}>
             <Feather name={tab.icon as any} size={22} color={tab.active ? COLORS.primary : COLORS.textBody} />
             <Text style={[styles.tabLabel, tab.active && styles.tabLabelActive]}>{tab.label}</Text>
           </TouchableOpacity>

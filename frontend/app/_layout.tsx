@@ -56,6 +56,7 @@ export default function RootLayout() {
       <Stack.Screen name="debug" />
       <Stack.Screen name="paywall" />
       <Stack.Screen name="home" />
+      <Stack.Screen name="audio-library" />
     </Stack>
   );
 }
