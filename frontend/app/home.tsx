@@ -39,6 +39,7 @@ export default function HomeScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recoveryIndex, setRecoveryIndex] = useState(0);
   const [weeklyMomentum, setWeeklyMomentum] = useState(0);
+  const [sleepDebt, setSleepDebt] = useState({ avg: 0, latest: 0, cumulative: 0, records: [] as any[] });
 
   useEffect(() => {
     (async () => {
@@ -57,6 +58,19 @@ export default function HomeScreen() {
           const data = await resp.json();
           setRecoveryIndex(data.recovery_index ?? 0);
           setWeeklyMomentum(data.weekly_momentum ?? 0);
+        }
+      } catch {}
+      // Fetch sleep debt
+      try {
+        const resp = await fetch(`${BACKEND_URL}/api/sleep-debt?email=atuljha2402@gmail.com`);
+        if (resp.ok) {
+          const data = await resp.json();
+          setSleepDebt({
+            avg: data.avg_debt_3d ?? 0,
+            latest: data.latest_actual_sleep ?? 0,
+            cumulative: data.cumulative_debt ?? 0,
+            records: data.records ?? [],
+          });
         }
       } catch {}
     })();
@@ -114,7 +128,7 @@ export default function HomeScreen() {
           <CalendarPill />
           <RecoveryScorecard score={recoveryIndex} momentum={weeklyMomentum} />
           <AutoRecoveries />
-          <HowWeKnowYou />
+          <HowWeKnowYou sleepDebt={sleepDebt} />
           <RecoveryPlan />
           <VentCTA isRecording={isRecording} onPress={toggleRecording} />
         </ScrollView>
@@ -212,16 +226,49 @@ function AutoRecoveries() {
 }
 
 const METRICS = [
-  { id: '1', icon: 'heart', title: 'Heart Rate', value: '68 bpm', label: 'Resting avg', color: '#7F00FF' },
   { id: '2', icon: 'moon', title: 'Sleep', value: '7.2 hrs', label: 'Last night', color: '#7F00FF' },
   { id: '3', icon: 'activity', title: 'Stress Level', value: 'Low', label: 'HRV based', color: '#7F00FF' },
 ];
 
-function HowWeKnowYou() {
+interface SleepData {
+  avg: number;
+  latest: number;
+  cumulative: number;
+  records: any[];
+}
+
+function HowWeKnowYou({ sleepDebt }: { sleepDebt: SleepData }) {
+  const debtLevel = sleepDebt.avg >= 4 ? 'Critical' : sleepDebt.avg >= 2 ? 'High' : 'Normal';
+  const debtColor = sleepDebt.avg >= 4 ? '#E53E3E' : sleepDebt.avg >= 2 ? '#DD6B20' : '#38A169';
+
   return (
     <View style={styles.sectionContainer} testID="how-we-know-you-section">
       <Text style={styles.sectionTitle}>How We Know You</Text>
       <View style={styles.metricsRow}>
+        {/* Sleep Debt Card - Real Data */}
+        <View style={[styles.metricCard, styles.sleepDebtCard]} testID="sleep-debt-card">
+          <View style={[styles.metricIconWrap, { backgroundColor: debtColor + '18' }]}>
+            <Feather name="moon" size={20} color={debtColor} />
+          </View>
+          <Text style={styles.metricLabel}>Sleep Debt</Text>
+          <Text style={[styles.metricValue, { color: debtColor }]}>{sleepDebt.avg}h</Text>
+          <Text style={styles.metricSub}>avg / 3 days</Text>
+          {/* Mini bar chart for 3 days */}
+          <View style={styles.miniChart}>
+            {sleepDebt.records.map((r: any, i: number) => {
+              const barH = Math.max(4, Math.min(28, r.debt_hours * 5.5));
+              const barColor = r.debt_hours >= 4 ? '#E53E3E' : r.debt_hours >= 2 ? '#DD6B20' : '#38A169';
+              return (
+                <View key={i} style={styles.miniBarWrap}>
+                  <View style={[styles.miniBar, { height: barH, backgroundColor: barColor }]} />
+                  <Text style={styles.miniBarLabel}>{r.debt_hours}h</Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Other metric cards */}
         {METRICS.map((m) => (
           <View key={m.id} style={styles.metricCard} testID={`metric-card-${m.id}`}>
             <View style={styles.metricIconWrap}>
@@ -622,6 +669,30 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Inter_400Regular',
     color: COLORS.textBody,
+  },
+  sleepDebtCard: {
+    paddingBottom: 10,
+  },
+  miniChart: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 8,
+    height: 36,
+  },
+  miniBarWrap: {
+    alignItems: 'center',
+  },
+  miniBar: {
+    width: 14,
+    borderRadius: 4,
+  },
+  miniBarLabel: {
+    fontSize: 8,
+    fontFamily: 'Inter_500Medium',
+    color: COLORS.textBody,
+    marginTop: 2,
   },
   planHeaderRow: {
     flexDirection: 'row',

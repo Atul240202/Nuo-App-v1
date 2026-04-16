@@ -640,6 +640,25 @@ async def get_recovery_index(email: str = 'atuljha2402@gmail.com'):
     }
 
 
+# ─── Sleep Debt ─────────────────────────────────────
+@api_router.get("/sleep-debt")
+async def get_sleep_debt(email: str = 'atuljha2402@gmail.com'):
+    """Return past 3 days sleep debt data."""
+    records = await db.sleep_debt.find(
+        {"user_id": email}, {"_id": 0}
+    ).sort("date", -1).to_list(3)
+    records.reverse()
+    avg_debt = round(sum(r.get("debt_hours", 0) for r in records) / max(len(records), 1), 1)
+    latest_actual = records[-1].get("actual_sleep_hours", 0) if records else 0
+    cumulative = records[-1].get("cumulative_debt_hours", 0) if records else 0
+    return {
+        "records": records,
+        "avg_debt_3d": avg_debt,
+        "latest_actual_sleep": latest_actual,
+        "cumulative_debt": cumulative,
+    }
+
+
 # ─── Health check ──────────────────────────────────
 @api_router.get("/")
 async def root():
