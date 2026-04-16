@@ -24,8 +24,38 @@ export default function DebugScreen() {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [subStatus, setSubStatus] = useState('');
+  const [sessionInfo, setSessionInfo] = useState('');
 
-  useEffect(() => { fetchEvents(); }, []);
+  useEffect(() => { fetchEvents(); fetchSessionStatus(); }, []);
+
+  const fetchSessionStatus = async () => {
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/session/status?email=atuljha2402@gmail.com`);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.plan) {
+          setSubStatus(`Active plan: ${data.plan} (expires ${data.expires_at?.split('T')[0] || 'N/A'})`);
+        } else {
+          setSubStatus(`Free tier: ${data.sessions_used}/${data.sessions_limit} sessions used today`);
+        }
+        setSessionInfo(data.reason === 'limit_reached' ? 'LIMIT REACHED — paywall will trigger' : '');
+      }
+    } catch {}
+  };
+
+  const clearSubscription = async () => {
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/debug/clear-subscription?email=atuljha2402@gmail.com`, { method: 'DELETE' });
+      if (resp.ok) {
+        const data = await resp.json();
+        setSubStatus(`Cleared: ${data.subscriptions_removed} sub(s), ${data.sessions_reset} session(s) reset`);
+        setSessionInfo('');
+        // Re-fetch status after clear
+        setTimeout(fetchSessionStatus, 500);
+      }
+    } catch { setSubStatus('Failed to clear'); }
+  };
 
   const fetchEvents = async () => {
     setLoading(true);
@@ -105,6 +135,21 @@ export default function DebugScreen() {
         </View>
         <Text style={styles.emailLabel}>Email: atuljha2402@gmail.com</Text>
         <Text style={styles.rangeLabel}>Showing: Past 7 days + Today</Text>
+
+        {/* Razorpay / Subscription Debug Section */}
+        <View style={styles.razorpaySection}>
+          <View style={styles.razorpayHeader}>
+            <Feather name="credit-card" size={16} color="#EF4444" />
+            <Text style={styles.razorpayTitle}>Razorpay Testing</Text>
+          </View>
+          <Text style={styles.subStatusText}>{subStatus || 'Loading...'}</Text>
+          {sessionInfo ? <Text style={styles.limitWarning}>{sessionInfo}</Text> : null}
+          <TouchableOpacity style={styles.clearSubBtn} onPress={clearSubscription} testID="clear-sub-btn">
+            <Feather name="trash-2" size={16} color="#FFF" />
+            <Text style={styles.clearSubBtnText}>Clear Subscription + Reset Sessions</Text>
+          </TouchableOpacity>
+          <Text style={styles.clearHint}>Removes active subscription and today's voice sessions so you can test the paywall flow again.</Text>
+        </View>
 
         {/* Connect */}
         {!calConnected && (
@@ -237,4 +282,14 @@ const styles = StyleSheet.create({
   rawTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: LIGHT.textMuted, marginBottom: 8 },
   rawBox: { backgroundColor: '#1A1523', borderRadius: 12, padding: 14 },
   rawText: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9D6CFF', lineHeight: 16 },
+
+  // Razorpay debug section
+  razorpaySection: { backgroundColor: '#FEF2F2', borderRadius: 14, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#FECACA' },
+  razorpayHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  razorpayTitle: { fontSize: 15, fontFamily: 'Poppins_600SemiBold', color: '#DC2626' },
+  subStatusText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: '#1A1523', marginBottom: 6 },
+  limitWarning: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: '#DC2626', marginBottom: 10, backgroundColor: '#FEE2E2', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' },
+  clearSubBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#DC2626', borderRadius: 10, paddingVertical: 12, marginBottom: 8 },
+  clearSubBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+  clearHint: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#991B1B', lineHeight: 16 },
 });

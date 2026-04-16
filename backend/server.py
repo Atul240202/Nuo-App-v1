@@ -851,6 +851,25 @@ async def get_audio_library():
     return {"tracks": tracks, "count": len(tracks)}
 
 
+# ─── Debug Endpoints ───────────────────────────────
+@api_router.delete("/debug/clear-subscription")
+async def clear_subscription(email: str = 'atuljha2402@gmail.com'):
+    """Debug: Remove active subscription so paywall can be tested again."""
+    result = await db.subscriptions.delete_many({"user_id": email})
+    # Also reset today's voice session count
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0)
+    sessions_deleted = await db.voice_sessions.delete_many({
+        "user_id": email,
+        "timestamp": {"$gte": today_start}
+    })
+    return {
+        "status": "cleared",
+        "subscriptions_removed": result.deleted_count,
+        "sessions_reset": sessions_deleted.deleted_count,
+        "email": email,
+    }
+
+
 # ─── Health check ──────────────────────────────────
 @api_router.get("/")
 async def root():
