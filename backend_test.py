@@ -10,7 +10,7 @@ import sys
 from urllib.parse import urljoin
 
 # Get backend URL from frontend environment
-BACKEND_URL = "https://learning-scorecard.preview.emergentagent.com"
+BACKEND_URL = "https://nuo-vocal-biometrics.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 def test_health_check():

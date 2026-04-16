@@ -412,8 +412,8 @@ function BottomTabBar({ isRecording, onMicPress }: { isRecording: boolean; onMic
   const heartbeatLoop = Animated.loop(
     Animated.sequence([
       Animated.timing(heartbeat, { 
-        toValue: 2.12, 
-        duration: 2800, 
+        toValue: 1.12, 
+        duration: 1800, 
         useNativeDriver: true,
         easing: Easing.inOut(Easing.ease)
       }),

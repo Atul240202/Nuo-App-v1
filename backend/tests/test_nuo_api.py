@@ -15,7 +15,7 @@ def get_backend_url():
             for line in f:
                 if line.startswith('EXPO_PUBLIC_BACKEND_URL='):
                     return line.split('=', 1)[1].strip()
-    return 'https://learning-scorecard.preview.emergentagent.com'
+    return 'https://nuo-vocal-biometrics.preview.emergentagent.com'
 
 BASE_URL = get_backend_url()
 
