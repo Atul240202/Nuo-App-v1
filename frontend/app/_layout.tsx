@@ -11,6 +11,8 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
+import { Sora_300Light, Sora_400Regular, Sora_500Medium } from '@expo-google-fonts/sora';
+import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 import * as SplashScreen from 'expo-splash-screen';
 
 SplashScreen.preventAutoHideAsync();
@@ -22,6 +24,10 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Poppins_600SemiBold,
     Poppins_700Bold,
+    Sora_300Light,
+    Sora_400Regular,
+    Sora_500Medium,
+    SpaceMono_400Regular,
   });
 
   useEffect(() => {
