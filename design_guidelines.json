@@ -1,0 +1,106 @@
+{
+  "project_name": "Nuos Wellness App",
+  "platform": "React Native (Expo)",
+  "theme": "light",
+  "archetype": "1 (Organic & Earthy) blended with 3 (Pastel & Soft)",
+  "core_principles": [
+    "Emotion First: The UI must feel like a calming, safe retreat.",
+    "Generous Spacing: Avoid cluttered metrics. Use negative space to reduce cognitive load (crucial for wellness apps).",
+    "Optical Softness: Employ large border radii (24px for cards, pill shapes for buttons) and ultra-diffuse ambient shadows."
+  ],
+  "colors": {
+    "background": "#F7F0F5",
+    "primary": "#7F00FF",
+    "primary_muted": "#F0E5FF",
+    "primary_gradient": ["#9D4CDD", "#7F00FF"],
+    "card_bg": "#FFFFFF",
+    "text_heading": "#1A1523",
+    "text_body": "#6E6A7C",
+    "text_inverse": "#FFFFFF",
+    "success_bg": "#E5F5E5",
+    "success_text": "#2E7D32",
+    "tab_bar_bg": "#FFFFFF"
+  },
+  "typography": {
+    "heading_font": "Poppins",
+    "body_font": "Inter",
+    "scale": {
+      "h1": { "fontSize": 28, "fontFamily": "Poppins_600SemiBold", "tracking": -0.5 },
+      "h2": { "fontSize": 20, "fontFamily": "Poppins_600SemiBold", "tracking": -0.3 },
+      "h3": { "fontSize": 16, "fontFamily": "Poppins_600SemiBold" },
+      "body_large": { "fontSize": 16, "fontFamily": "Inter_500Medium" },
+      "body": { "fontSize": 14, "fontFamily": "Inter_400Regular" },
+      "small": { "fontSize": 12, "fontFamily": "Inter_500Medium" }
+    }
+  },
+  "spacing": {
+    "screen_padding": 24,
+    "section_margin": 32,
+    "card_padding": 20,
+    "item_gap": 12
+  },
+  "radii": {
+    "pill": 999,
+    "card": 24,
+    "chip": 16
+  },
+  "shadows": {
+    "card_soft": {
+      "shadowColor": "#7F00FF",
+      "shadowOffset": { "width": 0, "height": 8 },
+      "shadowOpacity": 0.04,
+      "shadowRadius": 16,
+      "elevation": 2
+    },
+    "floating_fab": {
+      "shadowColor": "#7F00FF",
+      "shadowOffset": { "width": 0, "height": 12 },
+      "shadowOpacity": 0.25,
+      "shadowRadius": 20,
+      "elevation": 8
+    }
+  },
+  "layout_architecture": {
+    "1_Header": {
+      "layout": "Row, space-between, align-items center",
+      "details": "Greeting uses H1. Right side contains a flex-row of two icon buttons (Bluetooth, Help) with 12px gap."
+    },
+    "2_CalendarPill": {
+      "layout": "Self-flex-start, pill shape",
+      "details": "Background #FFFFFF, Icon + Text (Inter Medium). Padding horizontal 16px, vertical 8px."
+    },
+    "3_RecoveryIndex": {
+      "layout": "Full width card, column center",
+      "details": "White card. Huge circular progress using SVG or expo-linear-gradient trick. Inside circle: '78/100' (Poppins Bold). Below: 'Recovery Index' and a green success pill '+5% this week'. Dot indicators at the very bottom of the card."
+    },
+    "4_AutoRecoveries": {
+      "layout": "Column of cards",
+      "details": "Section header with H2 + Lightning Icon. List of 3 cards. Each card: White bg, row layout (Icon left, Title/Time right). Soft shadow."
+    },
+    "5_HowWeKnowYou": {
+      "layout": "Horizontal ScrollView",
+      "details": "3 metrics cards (Heart Rate, Sleep, Stress). Width approx 120px each. Left-aligned content: Icon top, Value middle (Poppins), Label bottom (Inter)."
+    },
+    "6_RecoveryPlan": {
+      "layout": "Column list",
+      "details": "Header with '0/3 done' pill. Task cards include Alarm/Calendar icons + check circle icon on the right."
+    },
+    "7_VentCTA": {
+      "layout": "Full width banner, linear gradient",
+      "details": "Gradient from #9D4CDD to #7F00FF. Large Mic icon. White text. 24px border radius. Fills width."
+    },
+    "8_BottomTabBar": {
+      "layout": "Absolute bottom, row space-around",
+      "details": "White background, top shadow. 5 tabs. The center 'Mic' tab is a floating action button (FAB) that translates Y upwards by -20px, large purple circle."
+    }
+  },
+  "instructions_to_main_agent": [
+    "CRITICAL: Use ONLY React Native core components (View, Text, ScrollView, SafeAreaView) and StyleSheet.create.",
+    "CRITICAL: Use `testID` attribute on all interactive elements, cards, and text values for automated testing (equivalent to data-testid).",
+    "Fonts: Implement @expo-google-fonts/inter and @expo-google-fonts/poppins. Use Poppins for H1/H2 and numbers, Inter for body/labels.",
+    "Icons: Use @expo/vector-icons (Feather or Ionicons). Do not use external image URLs for icons.",
+    "Gradients: Use expo-linear-gradient for the Vent CTA banner and the Scorecard circular progress.",
+    "Scroll behavior: Wrap the main content in a ScrollView. Add a bottom padding of at least 100px to the ScrollView contentContainerStyle so the absolute positioned bottom tab bar does not overlap the Vent CTA.",
+    "Shadows: Apply the soft diffuse shadows defined in the guidelines to give the cards an 'elevated, floating' premium feel against the #F7F0F5 background."
+  ]
+}
