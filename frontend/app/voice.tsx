@@ -82,6 +82,8 @@ export default function VoiceScreen() {
   const ring2 = useRef(new Animated.Value(0)).current;
   const ring3 = useRef(new Animated.Value(0)).current;
   const orbPulse = useRef(new Animated.Value(1)).current;
+  const idleRipple1 = useRef(new Animated.Value(0)).current;
+  const idleRipple2 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const dur = state === 'processing' ? 1300 : 2800;
@@ -91,7 +93,32 @@ export default function VoiceScreen() {
     ]));
     pulseLoop.start();
 
-    if (state === 'recording' || state === 'processing') {
+    if (state === 'idle') {
+      // Purple idle ripples — 2 concentric rings, offset by 800ms
+      [ring1, ring2, ring3].forEach(r => { r.stopAnimation(); r.setValue(0); });
+      const makeIdleRipple = (anim: Animated.Value, delay: number) =>
+        Animated.loop(Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(anim, { toValue: 1, duration: 2400, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0, duration: 0, useNativeDriver: true }),
+        ]));
+      makeIdleRipple(idleRipple1, 0).start();
+      makeIdleRipple(idleRipple2, 800).start();
+    } else if (state === 'recording') {
+      // Stop idle ripples, start red recording rings (faster, filled)
+      [idleRipple1, idleRipple2].forEach(r => { r.stopAnimation(); r.setValue(0); });
+      const makeRedRing = (anim: Animated.Value, delay: number) =>
+        Animated.loop(Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(anim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0, duration: 0, useNativeDriver: true }),
+        ]));
+      makeRedRing(ring1, 0).start();
+      makeRedRing(ring2, 333).start();
+      makeRedRing(ring3, 666).start();
+    } else if (state === 'processing') {
+      // Stop idle ripples, start violet processing rings
+      [idleRipple1, idleRipple2].forEach(r => { r.stopAnimation(); r.setValue(0); });
       const makeRing = (anim: Animated.Value, delay: number) =>
         Animated.loop(Animated.sequence([
           Animated.delay(delay),
@@ -102,9 +129,12 @@ export default function VoiceScreen() {
       makeRing(ring2, 1000).start();
       makeRing(ring3, 2000).start();
     } else {
-      [ring1, ring2, ring3].forEach(r => { r.stopAnimation(); r.setValue(0); });
+      [ring1, ring2, ring3, idleRipple1, idleRipple2].forEach(r => { r.stopAnimation(); r.setValue(0); });
     }
-    return () => { pulseLoop.stop(); [ring1, ring2, ring3].forEach(r => r.stopAnimation()); };
+    return () => {
+      pulseLoop.stop();
+      [ring1, ring2, ring3, idleRipple1, idleRipple2].forEach(r => r.stopAnimation());
+    };
   }, [state]);
 
   const startRecording = async () => {
@@ -173,9 +203,17 @@ export default function VoiceScreen() {
     } catch { setState('idle'); }
   };
 
-  const ringColor = state === 'processing' ? C.violet : C.teal;
+  const ringColor = state === 'processing' ? C.violet : state === 'recording' ? '#ef4444' : C.teal;
   const ringScale = (a: Animated.Value) => a.interpolate({ inputRange: [0, 1], outputRange: [1, 3.2] });
   const ringOpacity = (a: Animated.Value) => a.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] });
+
+  // Idle ripple interpolations
+  const idleRippleScale = (a: Animated.Value) => a.interpolate({ inputRange: [0, 1], outputRange: [1, 2] });
+  const idleRippleOpacity = (a: Animated.Value) => a.interpolate({ inputRange: [0, 0.8, 1], outputRange: [0.6, 0.1, 0] });
+
+  // Recording ring interpolations (solid filled, faster expand)
+  const recRingScale = (a: Animated.Value) => a.interpolate({ inputRange: [0, 1], outputRange: [1, 2.5] });
+  const recRingOpacity = (a: Animated.Value) => a.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.5, 0.1, 0] });
 
   return (
     <View style={styles.container} testID="voice-screen">
@@ -189,9 +227,27 @@ export default function VoiceScreen() {
       ) : (
         <View style={styles.center}>
           <View style={styles.ringsContainer}>
-            {[ring1, ring2, ring3].map((a, i) => (
-              <Animated.View key={i} style={[styles.ring, { borderColor: ringColor, transform: [{ scale: ringScale(a) }], opacity: ringOpacity(a) }]} />
+            {/* Idle purple ripples (only when idle) */}
+            {state === 'idle' && [idleRipple1, idleRipple2].map((a, i) => (
+              <Animated.View key={`idle-${i}`} style={[styles.idleRipple, {
+                transform: [{ scale: idleRippleScale(a) }],
+                opacity: idleRippleOpacity(a),
+              }]} />
             ))}
+
+            {/* Recording red filled rings (only when recording) */}
+            {state === 'recording' && [ring1, ring2, ring3].map((a, i) => (
+              <Animated.View key={`rec-${i}`} style={[styles.recordingRing, {
+                transform: [{ scale: recRingScale(a) }],
+                opacity: recRingOpacity(a),
+              }]} />
+            ))}
+
+            {/* Processing violet outline rings (only when processing) */}
+            {state === 'processing' && [ring1, ring2, ring3].map((a, i) => (
+              <Animated.View key={`proc-${i}`} style={[styles.ring, { borderColor: C.violet, transform: [{ scale: ringScale(a) }], opacity: ringOpacity(a) }]} />
+            ))}
+
             <Animated.View style={[styles.orbContainer, { transform: [{ scale: orbPulse }] }]}>
               <Image source={{ uri: NUO_ORB_BASE64 }} style={styles.orbImage} testID="nuo-orb" />
             </Animated.View>
@@ -433,6 +489,8 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   ringsContainer: { width: 200, height: 200, alignItems: 'center', justifyContent: 'center', marginBottom: 40 },
   ring: { position: 'absolute', width: 120, height: 120, borderRadius: 60, borderWidth: 1.5 },
+  idleRipple: { position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(157,108,255,0.4)' },
+  recordingRing: { position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(239,68,68,0.15)' },
   orbContainer: { width: 120, height: 120, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' },
   orbImage: { width: 120, height: 120 },
   stateText: { fontSize: 18, fontFamily: 'Sora_500Medium', color: C.textPrimary, textAlign: 'center', marginBottom: 8 },

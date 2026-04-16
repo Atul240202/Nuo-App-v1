@@ -896,7 +896,16 @@ async def get_progress_summary(period: str = "week", email: str = "atuljha2402@g
         for w in range(4):
             week_start = now - timedelta(days=(3 - w) * 7 + 6)
             week_end = week_start + timedelta(days=6)
-            week_sessions = [s for s in sessions if week_start <= s.get("timestamp", now) <= week_end]
+            week_sessions = []
+            for s in sessions:
+                ts = s.get("timestamp")
+                if ts:
+                    if isinstance(ts, str):
+                        ts = datetime.fromisoformat(ts)
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    if week_start <= ts <= week_end:
+                        week_sessions.append(s)
             score = round(sum(s.get("recovery_score", 50) for s in week_sessions) / max(1, len(week_sessions))) if week_sessions else 0
             chart_data.append({"day": f"W{w + 1}", "date": week_start.strftime("%Y-%m-%d"), "score": score, "is_today": w == 3})
     else:
