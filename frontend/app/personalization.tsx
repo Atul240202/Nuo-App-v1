@@ -59,16 +59,23 @@ export default function PersonalizationScreen() {
   };
 
   const handleCalendarSync = async () => {
+    // Open real Google Calendar OAuth during onboarding
     try {
-      await fetch(`${BACKEND_URL}/api/user/personalization`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ name, age, gender, profession, role, calendar_synced: true }),
-      });
-    } catch {}
-    setComplete(true);
-    setTimeout(() => router.replace('/transition'), 2000);
+      const resp = await fetch(`${BACKEND_URL}/api/calendar/auth?source=onboarding`);
+      const data = await resp.json();
+      if (data.auth_url) {
+        if (Platform.OS === 'web') {
+          window.location.href = data.auth_url;
+        } else {
+          const { Linking } = require('react-native');
+          Linking.openURL(data.auth_url);
+        }
+      }
+    } catch {
+      // Fallback: skip calendar and continue
+      setComplete(true);
+      setTimeout(() => router.replace('/transition'), 2000);
+    }
   };
 
   const canProceed = () => {

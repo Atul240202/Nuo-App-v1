@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import CircularProgress from '../components/CircularProgress';
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 const COLORS = {
   background: '#F7F0F5',
@@ -30,6 +32,21 @@ const COLORS = {
 };
 
 export default function HomeScreen() {
+  const [userName, setUserName] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const resp = await fetch(`${BACKEND_URL}/api/auth/me`, { credentials: 'include' });
+        if (resp.ok) {
+          const user = await resp.json();
+          const firstName = (user.name || '').split(' ')[0];
+          setUserName(firstName || 'there');
+        }
+      } catch {}
+    })();
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
@@ -39,7 +56,7 @@ export default function HomeScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <Header />
+          <Header name={userName} />
           <CalendarPill />
           <RecoveryScorecard />
           <AutoRecoveries />
@@ -53,13 +70,14 @@ export default function HomeScreen() {
   );
 }
 
-function Header() {
+function Header({ name }: { name: string }) {
   const router = useRouter();
+  const displayName = name || 'there';
   return (
     <View style={styles.headerRow} testID="header-section">
       <View>
-        <Text style={styles.headerGreeting}>Hi, Sarah 👋</Text>
-        <Text style={styles.headerSubtitle}>Nuos knows you're doing great</Text>
+        <Text style={styles.headerGreeting}>Hi, {displayName} 👋</Text>
+        <Text style={styles.headerSubtitle}>Nuo knows you're doing great</Text>
       </View>
       <View style={styles.headerIcons}>
         <TouchableOpacity style={styles.headerIconBtn} testID="bluetooth-btn">

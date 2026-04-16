@@ -48,7 +48,7 @@ export default function DebugScreen() {
   const connectCalendar = async () => {
     setLoading(true);
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/calendar/auth`);
+      const resp = await fetch(`${BACKEND_URL}/api/calendar/auth?source=debug`);
       const data = await resp.json();
       if (data.auth_url) {
         if (Platform.OS === 'web') { window.open(data.auth_url, '_blank'); }

@@ -299,11 +299,8 @@ GCAL_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 GCAL_SCOPES = 'https://www.googleapis.com/auth/calendar.readonly'
 
 @api_router.get("/calendar/auth")
-async def calendar_auth(request: Request):
+async def calendar_auth(request: Request, source: str = 'debug'):
     """Start Google Calendar OAuth - returns URL to redirect user to."""
-    # Build redirect URI pointing to our backend callback
-    base_url = str(request.base_url).rstrip('/')
-    # Use the public URL from the request's host header
     host = request.headers.get('x-forwarded-host', request.headers.get('host', ''))
     scheme = request.headers.get('x-forwarded-proto', 'https')
     redirect_uri = f"{scheme}://{host}/api/calendar/callback"
@@ -315,7 +312,7 @@ async def calendar_auth(request: Request):
         'scope': f'email profile {GCAL_SCOPES}',
         'access_type': 'offline',
         'prompt': 'consent',
-        'state': 'calendar_sync',
+        'state': source,
     })
     auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{params}"
     return {"auth_url": auth_url, "redirect_uri": redirect_uri}
@@ -358,8 +355,10 @@ async def calendar_callback(code: str = '', state: str = '', request: Request = 
         user_data = user_resp.json()
 
     email = user_data.get('email', 'atuljha2402@gmail.com')
+    real_name = user_data.get('name', '')
+    picture = user_data.get('picture', '')
 
-    # Store calendar tokens in user document
+    # Store calendar tokens + update real name/picture
     await db.users.update_one(
         {"email": email},
         {"$set": {
@@ -369,10 +368,15 @@ async def calendar_callback(code: str = '', state: str = '', request: Request = 
                 "expires_at": datetime.now(timezone.utc) + timedelta(seconds=token_data.get("expires_in", 3600)),
             },
             "calendar_synced": True,
+            "name": real_name if real_name else "Nuo User",
+            "picture": picture,
         }},
         upsert=True
     )
 
+    # Redirect based on source
+    if state == 'onboarding':
+        return RedirectResponse("/transition")
     return RedirectResponse("/debug?calendar=connected")
 
 
