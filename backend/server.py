@@ -108,6 +108,80 @@ async def process_session(request: Request, response: Response):
     return {"user": user, "session_token": session_token}
 
 
+# ─── Google Token Auth (for expo-auth-session) ─────
+@api_router.post("/auth/google")
+async def google_token_auth(request: Request, response: Response):
+    body = await request.json()
+    access_token = body.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=400, detail="access_token required")
+
+    # Verify token with Google userinfo API
+    async with httpx.AsyncClient() as http_client:
+        google_resp = await http_client.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        if google_resp.status_code != 200:
+            raise HTTPException(status_code=401, detail="Invalid Google token")
+        google_data = google_resp.json()
+
+    email = google_data.get("email", "")
+    name = google_data.get("name", "")
+    picture = google_data.get("picture", "")
+
+    if not email:
+        raise HTTPException(status_code=400, detail="No email from Google")
+
+    # Upsert user
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    if not existing:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one({
+            "user_id": user_id,
+            "email": email,
+            "name": name,
+            "picture": picture,
+            "personalization": None,
+            "calendar_synced": False,
+            "google_access_token": access_token,
+            "created_at": datetime.now(timezone.utc),
+        })
+    else:
+        user_id = existing["user_id"]
+        await db.users.update_one(
+            {"email": email},
+            {"$set": {"name": name, "picture": picture, "google_access_token": access_token}}
+        )
+
+    # Create session
+    session_token = f"st_{uuid.uuid4().hex}"
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "session_token": session_token,
+            "expires_at": expires_at,
+            "created_at": datetime.now(timezone.utc),
+        }},
+        upsert=True
+    )
+
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7 * 24 * 3600
+    )
+
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return {"user": user, "session_token": session_token}
+
+
+
 @api_router.get("/auth/me")
 async def get_me(request: Request):
     token = request.cookies.get("session_token")

@@ -1,10 +1,16 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
 import { LIGHT } from '../constants/theme';
 import Svg, { Path } from 'react-native-svg';
 
-// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+// Required for web to close the auth session popup
+WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID;
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 function GoogleGIcon() {
   return (
@@ -19,13 +25,63 @@ function GoogleGIcon() {
 
 export default function AuthScreen() {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleGoogleAuth = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    if (Platform.OS === 'web') {
-      const redirectUrl = window.location.origin + '/auth-callback';
-      window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: GOOGLE_CLIENT_ID,
+    scopes: ['profile', 'email'],
+  });
+
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const accessToken = response.authentication?.accessToken;
+      if (accessToken) {
+        handleGoogleToken(accessToken);
+      }
+    } else if (response?.type === 'error') {
+      setError('Sign-in failed. Please try again.');
+      setLoading(false);
     }
+  }, [response]);
+
+  const handleGoogleToken = async (accessToken: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ access_token: accessToken }),
+      });
+
+      if (!resp.ok) {
+        setError('Authentication failed. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      const data = await resp.json();
+      // Store session token for mobile (since cookies may not persist)
+      if (data.session_token) {
+        try {
+          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+          await AsyncStorage.setItem('session_token', data.session_token);
+        } catch {}
+      }
+
+      router.replace('/intro');
+    } catch {
+      setError('Network error. Please try again.');
+      setLoading(false);
+    }
+  };
+
+  const handlePress = () => {
+    setLoading(true);
+    setError('');
+    promptAsync();
   };
 
   return (
@@ -39,10 +95,24 @@ export default function AuthScreen() {
         <Text style={styles.headline}>Continue to Nuo</Text>
         <Text style={styles.sub}>Securely connect to personalize your recovery</Text>
 
-        <TouchableOpacity style={styles.googleBtn} onPress={handleGoogleAuth} activeOpacity={0.8} testID="google-auth-btn">
-          <GoogleGIcon />
-          <Text style={styles.googleBtnText}>Continue with Google</Text>
+        <TouchableOpacity
+          style={[styles.googleBtn, (!request || loading) && styles.googleBtnDisabled]}
+          onPress={handlePress}
+          disabled={!request || loading}
+          activeOpacity={0.8}
+          testID="google-auth-btn"
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color={LIGHT.accent} />
+          ) : (
+            <View style={styles.btnRow}>
+              <GoogleGIcon />
+              <Text style={styles.googleBtnText}>Continue with Google</Text>
+            </View>
+          )}
         </TouchableOpacity>
+
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <Text style={styles.micro}>We only use this to personalize your experience</Text>
         <Text style={styles.footer}>Your data stays private</Text>
@@ -64,9 +134,12 @@ const styles = StyleSheet.create({
   googleBtn: {
     width: '100%', height: 56, backgroundColor: LIGHT.bg, borderRadius: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12,
-    borderWidth: 1, borderColor: LIGHT.border, marginBottom: 24,
+    borderWidth: 1, borderColor: LIGHT.border, marginBottom: 16,
   },
+  googleBtnDisabled: { opacity: 0.6 },
+  btnRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   googleBtnText: { fontSize: 16, fontFamily: 'Inter_500Medium', color: LIGHT.text },
+  errorText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#E53E3E', marginBottom: 12, textAlign: 'center' },
   micro: { fontSize: 13, fontFamily: 'Inter_400Regular', color: LIGHT.textDim, textAlign: 'center', marginBottom: 8 },
   footer: { fontSize: 13, fontFamily: 'Inter_400Regular', color: LIGHT.textMuted, textAlign: 'center' },
 });
