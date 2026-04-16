@@ -24,11 +24,8 @@ export default function DebugScreen() {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [authUrl, setAuthUrl] = useState('');
 
-  useEffect(() => {
-    fetchEvents();
-  }, []);
+  useEffect(() => { fetchEvents(); }, []);
 
   const fetchEvents = async () => {
     setLoading(true);
@@ -44,9 +41,7 @@ export default function DebugScreen() {
         setCalConnected(false);
         setError(err.detail || 'Calendar not connected');
       }
-    } catch {
-      setError('Failed to fetch');
-    }
+    } catch { setError('Failed to fetch'); }
     setLoading(false);
   };
 
@@ -56,15 +51,10 @@ export default function DebugScreen() {
       const resp = await fetch(`${BACKEND_URL}/api/calendar/auth`);
       const data = await resp.json();
       if (data.auth_url) {
-        if (Platform.OS === 'web') {
-          window.open(data.auth_url, '_blank');
-        } else {
-          Linking.openURL(data.auth_url);
-        }
+        if (Platform.OS === 'web') { window.open(data.auth_url, '_blank'); }
+        else { Linking.openURL(data.auth_url); }
       }
-    } catch {
-      setError('Failed to start calendar auth');
-    }
+    } catch { setError('Failed to start calendar auth'); }
     setLoading(false);
   };
 
@@ -72,13 +62,31 @@ export default function DebugScreen() {
     if (!iso) return '';
     try {
       const d = new Date(iso);
-      return d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     } catch { return iso; }
   };
+
+  const formatDate = (iso: string) => {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    } catch { return iso; }
+  };
+
+  const isToday = (iso: string) => {
+    const d = new Date(iso);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  };
+
+  const todayEvents = events.filter(e => isToday(e.start));
+  const pastEvents = events.filter(e => !isToday(e.start));
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} testID="debug-back-btn">
           <Feather name="arrow-left" size={22} color={LIGHT.text} />
@@ -93,53 +101,77 @@ export default function DebugScreen() {
         {/* Status */}
         <View style={styles.statusCard}>
           <View style={[styles.statusDot, calConnected ? styles.dotGreen : styles.dotRed]} />
-          <Text style={styles.statusText}>
-            {calConnected ? 'Calendar Connected' : 'Calendar Not Connected'}
-          </Text>
+          <Text style={styles.statusText}>{calConnected ? 'Calendar Connected' : 'Calendar Not Connected'}</Text>
         </View>
-
         <Text style={styles.emailLabel}>Email: atuljha2402@gmail.com</Text>
+        <Text style={styles.rangeLabel}>Showing: Past 7 days + Today</Text>
 
-        {/* Connect button */}
+        {/* Connect */}
         {!calConnected && (
-          <TouchableOpacity style={styles.connectBtn} onPress={connectCalendar} disabled={loading} testID="connect-calendar-btn">
-            <Feather name="calendar" size={18} color="#FFF" />
-            <Text style={styles.connectBtnText}>
-              {loading ? 'Opening...' : 'Connect Google Calendar'}
-            </Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={styles.connectBtn} onPress={connectCalendar} disabled={loading} testID="connect-calendar-btn">
+              <Feather name="calendar" size={18} color="#FFF" />
+              <Text style={styles.connectBtnText}>{loading ? 'Opening...' : 'Connect Google Calendar'}</Text>
+            </TouchableOpacity>
+            <Text style={styles.hint}>After granting access, tap refresh ↻ to load events.</Text>
+          </>
         )}
 
-        {/* After connecting, show refresh hint */}
-        {!calConnected && !loading && (
-          <Text style={styles.hint}>
-            After granting access, tap the refresh icon above to load events.
-          </Text>
-        )}
-
-        {/* Error */}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        {/* Loading */}
         {loading && <ActivityIndicator size="large" color={LIGHT.accent} style={styles.loader} />}
 
-        {/* Events */}
-        {calConnected && events.length === 0 && !loading && (
-          <Text style={styles.emptyText}>No events in the next 7 days</Text>
+        {/* TODAY section */}
+        {calConnected && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.todayBadge}>
+                <Text style={styles.todayBadgeText}>Today</Text>
+              </View>
+              <Text style={styles.sectionCount}>{todayEvents.length} meeting{todayEvents.length !== 1 ? 's' : ''}</Text>
+            </View>
+            {todayEvents.length === 0 && <Text style={styles.emptyText}>No meetings today</Text>}
+            {todayEvents.map((ev) => (
+              <View key={ev.id} style={styles.eventCard} testID={`event-today-${ev.id}`}>
+                <View style={styles.timeCol}>
+                  <Text style={styles.timeText}>{formatTime(ev.start)}</Text>
+                  <Text style={styles.timeDash}>—</Text>
+                  <Text style={styles.timeTextEnd}>{formatTime(ev.end)}</Text>
+                </View>
+                <View style={styles.divider} />
+                <View style={styles.eventContent}>
+                  <Text style={styles.eventTitle}>{ev.summary}</Text>
+                  {ev.location ? <Text style={styles.eventLocation}>{ev.location}</Text> : null}
+                  <Text style={styles.eventStatus}>{ev.status}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
         )}
 
-        {events.map((ev) => (
-          <View key={ev.id} style={styles.eventCard} testID={`event-${ev.id}`}>
-            <View style={styles.eventDot} />
-            <View style={styles.eventContent}>
-              <Text style={styles.eventTitle}>{ev.summary}</Text>
-              <Text style={styles.eventTime}>{formatTime(ev.start)}</Text>
-              {ev.end ? <Text style={styles.eventTimeEnd}>→ {formatTime(ev.end)}</Text> : null}
-              {ev.location ? <Text style={styles.eventLocation}>{ev.location}</Text> : null}
-              <Text style={styles.eventStatus}>{ev.status}</Text>
+        {/* PAST 7 DAYS section */}
+        {calConnected && pastEvents.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.pastBadge}>
+                <Text style={styles.pastBadgeText}>Past 7 Days</Text>
+              </View>
+              <Text style={styles.sectionCount}>{pastEvents.length} meeting{pastEvents.length !== 1 ? 's' : ''}</Text>
             </View>
+            {pastEvents.map((ev) => (
+              <View key={ev.id} style={styles.eventCardPast} testID={`event-past-${ev.id}`}>
+                <View style={styles.timeCol}>
+                  <Text style={styles.dateText}>{formatDate(ev.start)}</Text>
+                  <Text style={styles.timeTextPast}>{formatTime(ev.start)}</Text>
+                </View>
+                <View style={styles.dividerPast} />
+                <View style={styles.eventContent}>
+                  <Text style={styles.eventTitlePast}>{ev.summary}</Text>
+                  {ev.location ? <Text style={styles.eventLocation}>{ev.location}</Text> : null}
+                </View>
+              </View>
+            ))}
           </View>
-        ))}
+        )}
 
         {/* Raw JSON */}
         {events.length > 0 && (
@@ -163,33 +195,45 @@ const styles = StyleSheet.create({
   refreshBtn: { padding: 8 },
   scroll: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 60 },
-  statusCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: LIGHT.bgSoft, borderRadius: 12, padding: 14, marginBottom: 12 },
+  statusCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: LIGHT.bgSoft, borderRadius: 12, padding: 14, marginBottom: 8 },
   statusDot: { width: 10, height: 10, borderRadius: 5, marginRight: 10 },
   dotGreen: { backgroundColor: '#22C55E' },
   dotRed: { backgroundColor: '#EF4444' },
   statusText: { fontSize: 15, fontFamily: 'Inter_500Medium', color: LIGHT.text },
-  emailLabel: { fontSize: 13, fontFamily: 'Inter_400Regular', color: LIGHT.textMuted, marginBottom: 16 },
-  connectBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#7F00FF', borderRadius: 12, paddingVertical: 14, marginBottom: 12,
-  },
+  emailLabel: { fontSize: 13, fontFamily: 'Inter_400Regular', color: LIGHT.textMuted, marginBottom: 4 },
+  rangeLabel: { fontSize: 12, fontFamily: 'Inter_500Medium', color: LIGHT.accent, marginBottom: 16 },
+  connectBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#7F00FF', borderRadius: 12, paddingVertical: 14, marginBottom: 12 },
   connectBtnText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
   hint: { fontSize: 13, fontFamily: 'Inter_400Regular', color: LIGHT.textDim, textAlign: 'center', marginBottom: 16 },
   errorText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#EF4444', marginBottom: 12 },
   loader: { marginVertical: 20 },
-  emptyText: { fontSize: 15, fontFamily: 'Inter_400Regular', color: LIGHT.textMuted, textAlign: 'center', marginTop: 40 },
-  eventCard: {
-    flexDirection: 'row', backgroundColor: LIGHT.bgSoft, borderRadius: 14, padding: 14,
-    marginBottom: 10, borderLeftWidth: 3, borderLeftColor: '#7F00FF',
-  },
-  eventDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#7F00FF', marginTop: 6, marginRight: 12 },
-  eventContent: { flex: 1 },
-  eventTitle: { fontSize: 15, fontFamily: 'Poppins_600SemiBold', color: LIGHT.text, marginBottom: 4 },
-  eventTime: { fontSize: 13, fontFamily: 'Inter_400Regular', color: LIGHT.accent },
-  eventTimeEnd: { fontSize: 12, fontFamily: 'Inter_400Regular', color: LIGHT.textMuted },
-  eventLocation: { fontSize: 12, fontFamily: 'Inter_400Regular', color: LIGHT.textDim, marginTop: 4 },
-  eventStatus: { fontSize: 11, fontFamily: 'Inter_500Medium', color: LIGHT.textDim, marginTop: 4, textTransform: 'uppercase' },
-  rawSection: { marginTop: 24 },
+  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: LIGHT.textMuted, textAlign: 'center', paddingVertical: 20 },
+
+  section: { marginBottom: 24 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  todayBadge: { backgroundColor: '#7F00FF', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
+  todayBadgeText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#FFF' },
+  pastBadge: { backgroundColor: LIGHT.bgSoft, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: LIGHT.border },
+  pastBadgeText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: LIGHT.textMuted },
+  sectionCount: { fontSize: 12, fontFamily: 'Inter_500Medium', color: LIGHT.textDim },
+
+  eventCard: { flexDirection: 'row', backgroundColor: '#F5F0FF', borderRadius: 14, padding: 14, marginBottom: 10, borderLeftWidth: 3, borderLeftColor: '#7F00FF' },
+  eventCardPast: { flexDirection: 'row', backgroundColor: LIGHT.bgSoft, borderRadius: 14, padding: 14, marginBottom: 8, borderLeftWidth: 3, borderLeftColor: LIGHT.border },
+  timeCol: { width: 70, alignItems: 'center', justifyContent: 'center' },
+  timeText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: '#7F00FF' },
+  timeDash: { fontSize: 10, color: LIGHT.textDim, marginVertical: 1 },
+  timeTextEnd: { fontSize: 12, fontFamily: 'Inter_400Regular', color: LIGHT.textMuted },
+  timeTextPast: { fontSize: 12, fontFamily: 'Inter_400Regular', color: LIGHT.textMuted },
+  dateText: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: LIGHT.textMuted, marginBottom: 2 },
+  divider: { width: 1, backgroundColor: '#D4C8F0', marginHorizontal: 10 },
+  dividerPast: { width: 1, backgroundColor: LIGHT.border, marginHorizontal: 10 },
+  eventContent: { flex: 1, justifyContent: 'center' },
+  eventTitle: { fontSize: 15, fontFamily: 'Poppins_600SemiBold', color: LIGHT.text, marginBottom: 2 },
+  eventTitlePast: { fontSize: 14, fontFamily: 'Inter_500Medium', color: LIGHT.textMuted, marginBottom: 2 },
+  eventLocation: { fontSize: 12, fontFamily: 'Inter_400Regular', color: LIGHT.textDim, marginTop: 2 },
+  eventStatus: { fontSize: 11, fontFamily: 'Inter_500Medium', color: LIGHT.textDim, marginTop: 2, textTransform: 'uppercase' },
+
+  rawSection: { marginTop: 16 },
   rawTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: LIGHT.textMuted, marginBottom: 8 },
   rawBox: { backgroundColor: '#1A1523', borderRadius: 12, padding: 14 },
   rawText: { fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9D6CFF', lineHeight: 16 },

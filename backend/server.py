@@ -416,16 +416,17 @@ async def get_calendar_events(email: str = 'atuljha2402@gmail.com'):
 
     # Fetch events from Google Calendar
     now = datetime.now(timezone.utc).isoformat()
-    max_time = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+    min_time = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    end_of_today = (datetime.now(timezone.utc).replace(hour=23, minute=59, second=59)).isoformat()
 
     async with httpx.AsyncClient() as http_client:
         events_resp = await http_client.get(
             'https://www.googleapis.com/calendar/v3/calendars/primary/events',
             headers={'Authorization': f'Bearer {access_token}'},
             params={
-                'timeMin': now,
-                'timeMax': max_time,
-                'maxResults': 30,
+                'timeMin': min_time,
+                'timeMax': end_of_today,
+                'maxResults': 50,
                 'singleEvents': 'true',
                 'orderBy': 'startTime',
             }
