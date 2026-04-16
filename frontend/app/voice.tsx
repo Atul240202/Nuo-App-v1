@@ -147,8 +147,8 @@ export default function VoiceScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0A0A14' },
   bgWrapper: { ...StyleSheet.absoluteFillObject },
-  bgImage: { flex: 1, opacity: 0.25 },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,10,20,0.55)' },
+  bgImage: { flex: 1, opacity: 0.7 },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,10,20,0.3)' },
   orbOuter: {
     width: 140, height: 140, borderRadius: 70, marginBottom: 48,
     shadowColor: '#9D6CFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 50, elevation: 12,

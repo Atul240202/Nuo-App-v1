@@ -89,11 +89,11 @@ const styles = StyleSheet.create({
   },
   bgImage: {
     flex: 1,
-    opacity: 0.45,
+    opacity: 0.7,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(10,10,20,0.5)',
+    backgroundColor: 'rgba(10,10,20,0.3)',
   },
   content: {
     marginBottom: 16,

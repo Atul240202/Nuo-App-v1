@@ -61,8 +61,8 @@ export default function Splash1Screen() {
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0A0A14' },
   bgWrapper: { ...StyleSheet.absoluteFillObject },
-  bgImage: { flex: 1, opacity: 0.35 },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,10,20,0.45)' },
+  bgImage: { flex: 1, opacity: 0.7 },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,10,20,0.3)' },
   headline: { fontSize: 34, fontFamily: 'Poppins_700Bold', color: DARK.text, textAlign: 'center', paddingHorizontal: 32 },
   sub: { fontSize: 26, fontFamily: 'Poppins_600SemiBold', color: DARK.accent, textAlign: 'center', marginTop: 8, paddingHorizontal: 32 },
   optional: { fontSize: 14, fontFamily: 'Inter_400Regular', fontStyle: 'italic', color: DARK.textDim, textAlign: 'center', marginTop: 16, paddingHorizontal: 40 },
