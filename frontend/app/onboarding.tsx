@@ -170,7 +170,11 @@ const styles = StyleSheet.create({
     right: 24,
     zIndex: 10,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 14,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   skipText: {
     fontSize: 14,

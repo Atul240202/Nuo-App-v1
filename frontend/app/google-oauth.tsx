@@ -14,6 +14,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 
+const showComingSoon = () => {
+  if (Platform.OS === 'web') {
+    window.alert('Coming soon');
+  } else {
+    Alert.alert('Coming soon');
+  }
+};
+
 function GoogleGIcon() {
   return (
     <Svg width={22} height={22} viewBox="0 0 48 48">
@@ -139,14 +147,14 @@ export default function GoogleOAuthScreen() {
           </Text>
           <View style={styles.footerLinks}>
             <TouchableOpacity
-              onPress={() => Alert.alert('Coming soon')}
+              onPress={showComingSoon}
               testID="terms-link"
             >
               <Text style={styles.footerLink}>Terms</Text>
             </TouchableOpacity>
             <Text style={styles.footerText}> & </Text>
             <TouchableOpacity
-              onPress={() => Alert.alert('Coming soon')}
+              onPress={showComingSoon}
               testID="privacy-link"
             >
               <Text style={styles.footerLink}>Privacy Policy</Text>
