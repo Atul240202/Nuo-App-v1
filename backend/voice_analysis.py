@@ -230,6 +230,11 @@ async def generate_insight(
 You produce exactly 3 fields in JSON. No markdown. No affirmations. No toxic positivity.
 Just clear observation + honest framing + one concrete action.
 
+IMPORTANT: The user may speak in Indian languages including Hindi, Marathi, Kannada, Gujarati, or Tamil.
+- If the transcript is in any Indian language, understand it natively — do NOT ask for translation.
+- Always respond in English regardless of the input language.
+- Understand cultural context, idioms, and emotional expressions specific to Indian languages.
+
 Return ONLY valid JSON with these 3 keys:
 - "feeling": 1 sentence describing what you observe in their voice/state. Grounded. No cheerleading.
 - "why": 1-2 sentences connecting the voice data to the calendar pattern. Use the numbers.
