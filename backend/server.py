@@ -568,6 +568,78 @@ async def get_calendar_events(email: str = 'atuljha2402@gmail.com'):
     return {"events": events, "count": len(events), "email": email}
 
 
+# ─── Recovery Index ────────────────────────────────
+@api_router.get("/recovery-index")
+async def get_recovery_index(email: str = 'atuljha2402@gmail.com'):
+    """
+    1. Rolling avg of (recovery_score / recovery_capacity) over past 7 days
+    2. Latest ratio minus rolling avg, expressed as percentage
+    """
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+
+    # Fetch voice sessions (recovery_score) from past 7 days
+    sessions = await db.voice_sessions.find(
+        {"user_id": email, "timestamp": {"$gte": seven_days_ago}},
+        {"_id": 0, "recovery_score": 1, "timestamp": 1}
+    ).sort("timestamp", -1).to_list(100)
+
+    # Fetch calendar loads (recovery_capacity_score) from past 7 days
+    loads = await db.calendar_loads.find(
+        {"user_id": email, "timestamp": {"$gte": seven_days_ago}},
+        {"_id": 0, "recovery_capacity_score": 1, "date": 1, "timestamp": 1}
+    ).sort("timestamp", -1).to_list(100)
+
+    # Build daily ratios: recovery_score / recovery_capacity (capped at 100)
+    # Match sessions with calendar loads by date
+    daily_ratios = []
+    for s in sessions:
+        ts = s["timestamp"]
+        if isinstance(ts, str):
+            ts = datetime.fromisoformat(ts)
+        day = ts.strftime("%Y-%m-%d")
+        rec_score = s.get("recovery_score", 50)
+
+        # Find matching calendar load for that day
+        cap = 100
+        for l in loads:
+            if l.get("date") == day:
+                cap = max(1, l.get("recovery_capacity_score", 100))
+                break
+
+        ratio = min(100, round((rec_score / cap) * 100))
+        daily_ratios.append({"date": day, "ratio": ratio, "recovery_score": rec_score, "capacity": cap})
+
+    if not daily_ratios:
+        return {
+            "recovery_index": 50,
+            "weekly_momentum": 0,
+            "rolling_avg": 50,
+            "latest_ratio": 50,
+            "data_points": 0,
+        }
+
+    # Rolling average
+    all_ratios = [d["ratio"] for d in daily_ratios]
+    rolling_avg = round(sum(all_ratios) / len(all_ratios))
+
+    # Latest ratio
+    latest_ratio = daily_ratios[0]["ratio"]
+
+    # Weekly momentum: (latest - rolling_avg) as percentage of rolling_avg
+    if rolling_avg > 0:
+        momentum = round(((latest_ratio - rolling_avg) / rolling_avg) * 100)
+    else:
+        momentum = 0
+
+    return {
+        "recovery_index": rolling_avg,
+        "weekly_momentum": momentum,
+        "rolling_avg": rolling_avg,
+        "latest_ratio": latest_ratio,
+        "data_points": len(daily_ratios),
+    }
+
+
 # ─── Health check ──────────────────────────────────
 @api_router.get("/")
 async def root():

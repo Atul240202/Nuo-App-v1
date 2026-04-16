@@ -37,6 +37,8 @@ export default function HomeScreen() {
   const [userName, setUserName] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recoveryIndex, setRecoveryIndex] = useState(0);
+  const [weeklyMomentum, setWeeklyMomentum] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -46,6 +48,15 @@ export default function HomeScreen() {
           const user = await resp.json();
           const firstName = (user.name || '').split(' ')[0];
           setUserName(firstName || 'there');
+        }
+      } catch {}
+      // Fetch recovery index
+      try {
+        const resp = await fetch(`${BACKEND_URL}/api/recovery-index?email=atuljha2402@gmail.com`);
+        if (resp.ok) {
+          const data = await resp.json();
+          setRecoveryIndex(data.recovery_index ?? 0);
+          setWeeklyMomentum(data.weekly_momentum ?? 0);
         }
       } catch {}
     })();
@@ -101,7 +112,7 @@ export default function HomeScreen() {
         >
           <Header name={userName} />
           <CalendarPill />
-          <RecoveryScorecard />
+          <RecoveryScorecard score={recoveryIndex} momentum={weeklyMomentum} />
           <AutoRecoveries />
           <HowWeKnowYou />
           <RecoveryPlan />
@@ -143,42 +154,27 @@ function CalendarPill() {
   );
 }
 
-function RecoveryScorecard() {
+function RecoveryScorecard({ score, momentum }: { score: number; momentum: number }) {
+  const isPositive = momentum >= 0;
   return (
     <View style={styles.scorecardContainer} testID="recovery-scorecard">
       <View style={styles.scorecardRow}>
         <View style={styles.scoreCircleWrapper}>
-          <CircularProgress size={140} strokeWidth={12} progress={78} />
+          <CircularProgress size={140} strokeWidth={12} progress={score} />
           <View style={styles.scoreTextOverlay}>
-            <Text style={styles.scoreNumber}>78</Text>
+            <Text style={styles.scoreNumber}>{score}</Text>
             <Text style={styles.scoreMax}>/ 100</Text>
           </View>
         </View>
         <View style={styles.scoreInfoCol}>
           <Text style={styles.scoreTitle}>Recovery Index</Text>
           <Text style={styles.scoreSubtitle}>Based on your last 7 days</Text>
-          <View style={styles.scoreBadge}>
-            <Feather name="trending-up" size={14} color={COLORS.successText} />
-            <Text style={styles.scoreBadgeText}> +5%</Text>
+          <View style={[styles.scoreBadge, !isPositive && styles.scoreBadgeNeg]}>
+            <Feather name={isPositive ? 'trending-up' : 'trending-down'} size={14} color={isPositive ? COLORS.successText : '#E53E3E'} />
+            <Text style={[styles.scoreBadgeText, !isPositive && styles.scoreBadgeTextNeg]}> {isPositive ? '+' : ''}{momentum}%</Text>
             <Text style={styles.scoreBadgeLabel}> this week</Text>
           </View>
         </View>
-      </View>
-      <View style={styles.dotsRow}>
-        {[10, 10, 12, 12, 14, 16].map((size, i) => (
-          <View
-            key={i}
-            style={[
-              styles.dot,
-              {
-                width: size,
-                height: size,
-                borderRadius: size / 2,
-                backgroundColor: i < 4 ? '#C4B5D9' : i === 4 ? '#B09ED0' : '#9D85C7',
-              },
-            ]}
-          />
-        ))}
       </View>
     </View>
   );
@@ -505,10 +501,16 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
   },
+  scoreBadgeNeg: {
+    backgroundColor: '#FEE2E2',
+  },
   scoreBadgeText: {
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
     color: COLORS.successText,
+  },
+  scoreBadgeTextNeg: {
+    color: '#E53E3E',
   },
   scoreBadgeLabel: {
     fontSize: 13,
