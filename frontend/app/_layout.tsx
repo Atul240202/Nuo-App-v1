@@ -25,9 +25,7 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (fontsLoaded) {
-      SplashScreen.hideAsync();
-    }
+    if (fontsLoaded) SplashScreen.hideAsync();
   }, [fontsLoaded]);
 
   if (!fontsLoaded) {
@@ -41,9 +39,14 @@ export default function RootLayout() {
   return (
     <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
       <Stack.Screen name="index" />
+      <Stack.Screen name="splash1" />
       <Stack.Screen name="splash2" />
-      <Stack.Screen name="onboarding" />
-      <Stack.Screen name="google-oauth" />
+      <Stack.Screen name="auth" />
+      <Stack.Screen name="auth-callback" />
+      <Stack.Screen name="intro" />
+      <Stack.Screen name="personalization" />
+      <Stack.Screen name="transition" />
+      <Stack.Screen name="voice" />
       <Stack.Screen name="home" />
     </Stack>
   );
@@ -54,6 +57,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F7F0F5',
+    backgroundColor: '#0A0A14',
   },
 });

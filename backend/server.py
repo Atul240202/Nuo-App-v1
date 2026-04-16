@@ -1,58 +1,195 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import uuid
+import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List
-import uuid
-from datetime import datetime
-
+from typing import Optional, List
+from datetime import datetime, timezone, timedelta
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+# ─── Models ────────────────────────────────────────
+class UserProfile(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    picture: Optional[str] = None
+    personalization: Optional[dict] = None
+    calendar_synced: bool = False
 
-# Define Models
-class StatusCheck(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+class PersonalizationData(BaseModel):
+    name: str
+    age: str
+    gender: str
+    profession: str
+    role: str
+    calendar_synced: bool = False
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+# ─── Auth Endpoints ────────────────────────────────
+@api_router.post("/auth/session")
+async def process_session(request: Request, response: Response):
+    body = await request.json()
+    session_id = body.get("session_id")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
 
-# Add your routes to the router instead of directly to app
+    # Exchange session_id with Emergent Auth
+    async with httpx.AsyncClient() as http_client:
+        auth_resp = await http_client.get(
+            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+            headers={"X-Session-ID": session_id}
+        )
+        if auth_resp.status_code != 200:
+            raise HTTPException(status_code=401, detail="Invalid session")
+        auth_data = auth_resp.json()
+
+    email = auth_data["email"]
+    name = auth_data.get("name", "")
+    picture = auth_data.get("picture", "")
+    session_token = auth_data.get("session_token", f"st_{uuid.uuid4().hex}")
+
+    # Upsert user
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    if not existing:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one({
+            "user_id": user_id,
+            "email": email,
+            "name": name,
+            "picture": picture,
+            "personalization": None,
+            "calendar_synced": False,
+            "created_at": datetime.now(timezone.utc),
+        })
+    else:
+        user_id = existing["user_id"]
+        await db.users.update_one(
+            {"email": email},
+            {"$set": {"name": name, "picture": picture}}
+        )
+
+    # Store session
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "session_token": session_token,
+            "expires_at": expires_at,
+            "created_at": datetime.now(timezone.utc),
+        }},
+        upsert=True
+    )
+
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7 * 24 * 3600
+    )
+
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return {"user": user, "session_token": session_token}
+
+
+@api_router.get("/auth/me")
+async def get_me(request: Request):
+    token = request.cookies.get("session_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=401, detail="Session not found")
+
+    expires_at = session["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Session expired")
+
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@api_router.post("/auth/logout")
+async def logout(request: Request, response: Response):
+    token = request.cookies.get("session_token")
+    if token:
+        await db.user_sessions.delete_one({"session_token": token})
+    response.delete_cookie("session_token", path="/")
+    return {"message": "Logged out"}
+
+
+# ─── Personalization ───────────────────────────────
+@api_router.post("/user/personalization")
+async def save_personalization(request: Request):
+    token = request.cookies.get("session_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    body = await request.json()
+    await db.users.update_one(
+        {"user_id": session["user_id"]},
+        {"$set": {"personalization": body}}
+    )
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    return user
+
+
+# ─── Voice Upload ──────────────────────────────────
+@api_router.post("/voice/upload")
+async def upload_voice(request: Request):
+    token = request.cookies.get("session_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+
+    body = await request.json()
+    duration = body.get("duration", 0)
+    # In production, process audio with AI. For now, acknowledge receipt.
+    return {"status": "received", "duration": duration, "message": "Voice input processed"}
+
+
+# ─── Health check ──────────────────────────────────
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Nuo API running"}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.dict()
-    status_obj = StatusCheck(**status_dict)
-    _ = await db.status_checks.insert_one(status_obj.dict())
-    return status_obj
-
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    status_checks = await db.status_checks.find().to_list(1000)
-    return [StatusCheck(**status_check) for status_check in status_checks]
-
-# Include the router in the main app
+# Include router
 app.include_router(api_router)
 
 app.add_middleware(
@@ -63,11 +200,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
