@@ -108,6 +108,18 @@ export default function VoiceScreen() {
   }, [state]);
 
   const startRecording = async () => {
+    // Check session limit before allowing recording
+    try {
+      const statusResp = await fetch(`${BACKEND_URL}/api/session/status?email=atuljha2402@gmail.com`);
+      if (statusResp.ok) {
+        const status = await statusResp.json();
+        if (!status.allowed) {
+          router.push('/paywall');
+          return;
+        }
+      }
+    } catch {}
+
     try {
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') return;

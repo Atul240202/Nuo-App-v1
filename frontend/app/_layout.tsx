@@ -54,6 +54,7 @@ export default function RootLayout() {
       <Stack.Screen name="transition" />
       <Stack.Screen name="voice" />
       <Stack.Screen name="debug" />
+      <Stack.Screen name="paywall" />
       <Stack.Screen name="home" />
     </Stack>
   );

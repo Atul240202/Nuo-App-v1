@@ -6,7 +6,10 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import uuid
+import hmac
+import hashlib
 import httpx
+import razorpay
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -24,6 +27,17 @@ db = client[os.environ['DB_NAME']]
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
+
+# Razorpay client
+rzp_client = razorpay.Client(auth=(os.environ.get('RAZORPAY_KEY_ID', ''), os.environ.get('RAZORPAY_KEY_SECRET', '')))
+
+FREE_SESSIONS_PER_DAY = 3
+PLANS = {
+    "1_day": {"label": "1 Day Pass", "amount_paise": 9900, "days": 1},
+    "1_week": {"label": "1 Week Pass", "amount_paise": 39900, "days": 7},
+    "1_month": {"label": "1 Month Pass", "amount_paise": 99900, "days": 30},
+}
+
 
 # ─── Models ────────────────────────────────────────
 class UserProfile(BaseModel):
@@ -583,6 +597,139 @@ async def get_calendar_events(email: str = 'atuljha2402@gmail.com'):
         })
 
     return {"events": events, "count": len(events), "email": email}
+
+
+# ─── Session Limits & Payments ─────────────────────
+@api_router.get("/session/status")
+async def session_status(email: str = 'atuljha2402@gmail.com'):
+    """Check if user can start a session (3 free/day or has active plan)."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # Check active subscription
+    sub = await db.subscriptions.find_one(
+        {"user_id": email, "expires_at": {"$gt": datetime.now(timezone.utc)}, "status": "active"},
+        {"_id": 0}
+    )
+    if sub:
+        return {"allowed": True, "reason": "active_plan", "plan": sub.get("plan_id"), "expires_at": sub["expires_at"].isoformat(), "sessions_used": 0, "sessions_limit": -1}
+
+    # Count today's sessions
+    count = await db.voice_sessions.count_documents({"user_id": email, "timestamp": {"$gte": datetime.now(timezone.utc).replace(hour=0, minute=0, second=0)}})
+    allowed = count < FREE_SESSIONS_PER_DAY
+    return {
+        "allowed": allowed,
+        "reason": "free_tier" if allowed else "limit_reached",
+        "sessions_used": count,
+        "sessions_limit": FREE_SESSIONS_PER_DAY,
+        "plan": None,
+        "expires_at": None,
+    }
+
+
+@api_router.get("/payment/plans")
+async def get_plans():
+    """Return available top-up plans."""
+    rzp_key = os.environ.get('RAZORPAY_KEY_ID', '')
+    return {
+        "razorpay_key": rzp_key,
+        "plans": [
+            {"id": "1_day", "label": "1 Day Pass", "price": 99, "amount_paise": 9900, "days": 1},
+            {"id": "1_week", "label": "1 Week Pass", "price": 399, "amount_paise": 39900, "days": 7},
+            {"id": "1_month", "label": "1 Month Pass", "price": 999, "amount_paise": 99900, "days": 30},
+        ],
+    }
+
+
+@api_router.post("/payment/create-order")
+async def create_order(request: Request):
+    """Create a Razorpay order for a plan."""
+    body = await request.json()
+    plan_id = body.get("plan_id")
+    email = body.get("email", "atuljha2402@gmail.com")
+
+    if plan_id not in PLANS:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+
+    plan = PLANS[plan_id]
+    receipt = f"nuo_{plan_id}_{uuid.uuid4().hex[:8]}"
+
+    order = rzp_client.order.create({
+        "amount": plan["amount_paise"],
+        "currency": "INR",
+        "receipt": receipt,
+        "payment_capture": 1,
+    })
+
+    # Save order to DB
+    await db.payment_orders.insert_one({
+        "order_id": order["id"],
+        "user_id": email,
+        "plan_id": plan_id,
+        "amount_paise": plan["amount_paise"],
+        "days": plan["days"],
+        "status": "created",
+        "created_at": datetime.now(timezone.utc),
+    })
+
+    return {"order_id": order["id"], "amount": plan["amount_paise"], "currency": "INR", "plan": plan}
+
+
+@api_router.post("/payment/verify")
+async def verify_payment(request: Request):
+    """Verify Razorpay payment and activate subscription."""
+    body = await request.json()
+    razorpay_order_id = body.get("razorpay_order_id")
+    razorpay_payment_id = body.get("razorpay_payment_id")
+    razorpay_signature = body.get("razorpay_signature")
+    email = body.get("email", "atuljha2402@gmail.com")
+
+    # Verify signature
+    try:
+        rzp_client.utility.verify_payment_signature({
+            "razorpay_order_id": razorpay_order_id,
+            "razorpay_payment_id": razorpay_payment_id,
+            "razorpay_signature": razorpay_signature,
+        })
+    except Exception:
+        raise HTTPException(status_code=400, detail="Payment verification failed")
+
+    # Find order
+    order = await db.payment_orders.find_one({"order_id": razorpay_order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # Update order status
+    await db.payment_orders.update_one(
+        {"order_id": razorpay_order_id},
+        {"$set": {"status": "paid", "payment_id": razorpay_payment_id, "paid_at": datetime.now(timezone.utc)}}
+    )
+
+    # Activate subscription
+    days = order["days"]
+    expires_at = datetime.now(timezone.utc) + timedelta(days=days)
+
+    # Extend if active sub exists
+    existing = await db.subscriptions.find_one(
+        {"user_id": email, "expires_at": {"$gt": datetime.now(timezone.utc)}, "status": "active"},
+        {"_id": 0}
+    )
+    if existing:
+        expires_at = existing["expires_at"] + timedelta(days=days)
+
+    await db.subscriptions.update_one(
+        {"user_id": email, "status": "active"},
+        {"$set": {
+            "user_id": email,
+            "plan_id": order["plan_id"],
+            "payment_id": razorpay_payment_id,
+            "expires_at": expires_at,
+            "status": "active",
+            "updated_at": datetime.now(timezone.utc),
+        }},
+        upsert=True
+    )
+
+    return {"status": "success", "plan": order["plan_id"], "expires_at": expires_at.isoformat()}
 
 
 # ─── Recovery Index ────────────────────────────────
