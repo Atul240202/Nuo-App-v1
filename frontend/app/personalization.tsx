@@ -25,6 +25,18 @@ export default function PersonalizationScreen() {
   const [complete, setComplete] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
+  const [calendarAlreadySynced, setCalendarAlreadySynced] = useState(false);
+
+  // Check if calendar is already synced on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const resp = await fetch(`${BACKEND_URL}/api/calendar/events?email=atuljha2402@gmail.com`);
+        if (resp.ok) setCalendarAlreadySynced(true);
+      } catch {}
+    })();
+  }, []);
+
   const animateStep = (next: number) => {
     Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
       setStep(next);
@@ -192,14 +204,30 @@ export default function PersonalizationScreen() {
           <View testID="step-calendar">
             <Text style={styles.question}>Let Nuo know your calendar</Text>
             <Text style={styles.calSub}>To find the best moments for recovery in your day</Text>
-            <TouchableOpacity style={styles.syncBtn} onPress={handleCalendarSync} testID="sync-calendar-btn">
-              <LinearGradient colors={['#7F00FF', '#5A00B8']} style={styles.syncGradient}>
-                <Text style={styles.syncText}>Sync your calendar now</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleNext} testID="skip-calendar-btn">
-              <Text style={styles.skipText}>Skip for now</Text>
-            </TouchableOpacity>
+            {calendarAlreadySynced ? (
+              <>
+                <View style={styles.syncedRow}>
+                  <View style={styles.syncedDot} />
+                  <Text style={styles.syncedText}>Calendar synced</Text>
+                </View>
+                <TouchableOpacity onPress={handleNext} testID="continue-btn">
+                  <LinearGradient colors={['#7F00FF', '#5A00B8']} style={styles.syncGradient}>
+                    <Text style={styles.syncText}>Continue</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity style={styles.syncBtn} onPress={handleCalendarSync} testID="sync-calendar-btn">
+                  <LinearGradient colors={['#7F00FF', '#5A00B8']} style={styles.syncGradient}>
+                    <Text style={styles.syncText}>Sync your calendar now</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleNext} testID="skip-calendar-btn">
+                  <Text style={styles.skipText}>Skip for now</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         )}
       </Animated.View>
@@ -249,6 +277,9 @@ const styles = StyleSheet.create({
   syncGradient: { height: 56, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
   syncText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#FFFFFF' },
   skipText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: LIGHT.textMuted, textAlign: 'center', paddingVertical: 12 },
+  syncedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+  syncedDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#22C55E', marginRight: 8 },
+  syncedText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: '#22C55E' },
   calibrateText: { fontSize: 16, fontFamily: 'Inter_500Medium', color: LIGHT.textMuted, marginTop: 16 },
   completeText: { fontSize: 22, fontFamily: 'Poppins_600SemiBold', color: LIGHT.text },
 });
