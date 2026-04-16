@@ -153,21 +153,22 @@ export default function VoiceScreen() {
       setResult({
         stress_score: 62, recovery_score: 45, transcript: "Feeling overwhelmed with work today.", emotion: "tense",
         calendar_data: { meetings_count: 6, back_to_back: 3, meeting_load_score: 78, recovery_capacity_score: 22, avg_gap_mins: 12 },
+        audio_tracks: [
+          { audio_id: "aud_df_bin_001", title: "40Hz Binaural Focus", label: "Deep Focus", duration_sec: 600, recommended: true, file_url: "https://pause-v1-audio.sfo3.digitaloceanspaces.com/NY%20Audio%20Interventions/Alpha%20Waves%20Heal%20Damage%20In%20The%20Body%2C%20Brain%20Massage%20While%20You%20Sleep%2C%20Improve%20Your%20Memory%20%5BpxqW0tgb5A%5D.mp3" },
+          { audio_id: "aud_df_bin_002", title: "Alpha Wave Concentration", label: "Deep Recovery", duration_sec: 600, recommended: false, file_url: "https://pause-v1-audio.sfo3.cdn.digitaloceanspaces.com/NY%20Audio%20Interventions/Focus%20Music%20%E2%80%A2%20Enter%20Hyperfocus%20Mode%20for%20Deep%20Work%20&%20Flow%20%5BE79seWbsZds%5D.mp3" },
+          { audio_id: "aud_df_flo_003", title: "Flow State Ambient", label: "High Relaxation", duration_sec: 600, recommended: false, file_url: "https://pause-v1-audio.sfo3.cdn.digitaloceanspaces.com/NY%20Audio%20Interventions/Instant%20Relief%20from%20Stress%20and%20Anxiety%20_%20Detox%20Negative%20Emotions,%20Calm%20Nature%20Healing%20Sleep%20Music%E2%98%8558%20%5B79kpoGF8KWU%5D.mp3" },
+        ],
         insight: {
           feeling: "Voice stress elevated. Recovery at 45.",
           full_response: {
             spoken_response: "Five hours of sleep debt, three nights running. Six meetings today, three back to back. Voice stress is at 1.2 sigma, recovery is 45. This is a dip from last week's 68 baseline. I've scheduled a 10-minute breathwork at 3:05 PM — only gap before your evening block. You can move it, but I'd leave it. Resets below if you want something now. I'll check after tonight's sleep.",
             status_summary: { sleep_hours_avg_3d: 3, sleep_debt_hours: 5, voice_stress_sigma: 1.2, recovery_score: 45, detected_emotion: "tense", meeting_count_today: 6, back_to_back_meetings: 3, day_ends_at: "7:00 PM", assessment: "dip" },
             scheduled_intervention: { start_time: "3:05 PM", duration_min: 10, audio_label: "breathwork", audio_title: "4-7-8 Breathing", reason: "Only gap before 3:30-7 PM block. Breathwork: highest completion in your history." },
-            reset_options: [
-              { rank: 1, title: "4-7-8 Breathing", label: "breathwork", duration_sec: 600, nuo_pick: true, pick_reason: "Highest completion rate. Matches high-stress state." },
-              { rank: 2, title: "Ocean Ambient", label: "calming", duration_sec: 600, nuo_pick: false, pick_reason: null },
-              { rank: 3, title: "NSDR Body Scan", label: "nsdr", duration_sec: 600, nuo_pick: false, pick_reason: null },
-            ],
+            reset_options: [],
             next_checkin: "After tonight's sleep. If recovery shifts, you'll know by 7 AM.",
           },
         },
-      });
+      } as any);
       setState('results');
     } catch { setState('idle'); }
   };
@@ -285,7 +286,8 @@ function ResultsPanel({ result, onReset }: { result: FullResult; onReset: () => 
   const full = result.insight.full_response;
   const status = full?.status_summary;
   const sched = full?.scheduled_intervention;
-  const resets = full?.reset_options || [];
+  // Use real audio_tracks from backend (have file_url) instead of LLM reset_options (no file_url)
+  const audioTracks = (result as any).audio_tracks || [];
   const [interventionKept, setInterventionKept] = useState<boolean | null>(null);
 
   // Data cards
@@ -378,8 +380,8 @@ function ResultsPanel({ result, onReset }: { result: FullResult; onReset: () => 
 
       {/* ── 7: Reset Now + Top 3 Audio ── */}
       <Text style={styles.resetHeading}>Reset Now</Text>
-      {resets.map((track) => (
-        <AudioCard key={track.rank} track={track} />
+      {audioTracks.map((track: any, idx: number) => (
+        <AudioCard key={track.audio_id || idx} track={{ ...track, rank: idx + 1, nuo_pick: track.recommended }} />
       ))}
 
       {/* Bottom actions */}
