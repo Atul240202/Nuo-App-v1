@@ -1,812 +1,157 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  SafeAreaView,
-  TouchableOpacity,
-  Platform,
-  StatusBar,
-} from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, Animated, StyleSheet, Platform, StatusBar } from 'react-native';
+import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import {
-  useFonts,
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-} from '@expo-google-fonts/inter';
-import {
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-} from '@expo-google-fonts/poppins';
-import CircularProgress from '../components/CircularProgress';
+import Svg, { Path } from 'react-native-svg';
 
-const COLORS = {
-  background: '#F7F0F5',
-  primary: '#7F00FF',
-  primaryMuted: '#F0E5FF',
-  cardBg: '#FFFFFF',
-  textHeading: '#1A1523',
-  textBody: '#6E6A7C',
-  textInverse: '#FFFFFF',
-  successBg: '#E5F5E5',
-  successText: '#2E7D32',
-  tabBarBg: '#FFFFFF',
-  border: '#EDE5F5',
-  iconBg: '#F0E5FF',
-};
+export default function SplashScreen1() {
+  const router = useRouter();
 
-export default function Index() {
-  const [fontsLoaded] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Poppins_600SemiBold,
-    Poppins_700Bold,
+  const bgAnim = useRef(new Animated.Value(0)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.85)).current;
+  const line1Opacity = useRef(new Animated.Value(0)).current;
+  const line2Opacity = useRef(new Animated.Value(0)).current;
+  const line3Opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Background color (non-native driver)
+    Animated.timing(bgAnim, {
+      toValue: 1,
+      duration: 2000,
+      useNativeDriver: false,
+    }).start();
+
+    // Logo: opacity + scale at 300ms delay
+    Animated.sequence([
+      Animated.delay(300),
+      Animated.parallel([
+        Animated.timing(logoOpacity, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(logoScale, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ]),
+    ]).start();
+
+    // Line 1 at 900ms
+    Animated.sequence([
+      Animated.delay(900),
+      Animated.timing(line1Opacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+    ]).start();
+
+    // Line 2 at 1300ms
+    Animated.sequence([
+      Animated.delay(1300),
+      Animated.timing(line2Opacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+    ]).start();
+
+    // Line 3 at 1700ms
+    Animated.sequence([
+      Animated.delay(1700),
+      Animated.timing(line3Opacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+    ]).start();
+
+    // Auto-navigate after 3500ms
+    const timer = setTimeout(() => {
+      router.replace('/splash2');
+    }, 3500);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  const backgroundColor = bgAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#EDE0EA', '#F7F0F5'],
   });
 
-  if (!fontsLoaded) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text>Loading...</Text>
-      </View>
-    );
-  }
-
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
-      <View style={styles.rootContainer}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* 1. Header */}
-          <Header />
+    <Animated.View style={[styles.container, { backgroundColor }]} testID="splash1-screen">
+      <StatusBar barStyle="dark-content" />
 
-          {/* 2. Calendar Pill */}
-          <CalendarPill />
-
-          {/* 3. Recovery Index Scorecard */}
-          <RecoveryScorecard />
-
-          {/* 4. Auto Recoveries Today */}
-          <AutoRecoveries />
-
-          {/* 5. How We Know You */}
-          <HowWeKnowYou />
-
-          {/* 6. Today's Recovery Plan */}
-          <RecoveryPlan />
-
-          {/* 7. Vent with Nuo CTA */}
-          <VentCTA />
-        </ScrollView>
-
-        {/* 8. Bottom Tab Bar */}
-        <BottomTabBar />
-      </View>
-    </SafeAreaView>
-  );
-}
-
-/* ─── 1. HEADER ──────────────────────────────────────── */
-function Header() {
-  return (
-    <View style={styles.headerRow} testID="header-section">
-      <View>
-        <Text style={styles.headerGreeting}>Hi, Sarah 👋</Text>
-        <Text style={styles.headerSubtitle}>Nuos knows you're doing great</Text>
-      </View>
-      <View style={styles.headerIcons}>
-        <TouchableOpacity style={styles.headerIconBtn} testID="bluetooth-btn">
-          <Feather name="bluetooth" size={20} color={COLORS.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.headerIconBtn} testID="help-btn">
-          <Feather name="help-circle" size={20} color={COLORS.textBody} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-/* ─── 2. CALENDAR PILL ───────────────────────────────── */
-function CalendarPill() {
-  return (
-    <TouchableOpacity style={styles.calendarPill} testID="calendar-pill">
-      <Feather name="calendar" size={16} color={COLORS.primary} />
-      <Text style={styles.calendarText}>Calendar</Text>
-    </TouchableOpacity>
-  );
-}
-
-/* ─── 3. RECOVERY SCORECARD ──────────────────────────── */
-function RecoveryScorecard() {
-  return (
-    <View style={styles.scorecardContainer} testID="recovery-scorecard">
-      <View style={styles.scorecardRow}>
-        <View style={styles.scoreCircleWrapper}>
-          <CircularProgress size={140} strokeWidth={12} progress={78} />
-          <View style={styles.scoreTextOverlay}>
-            <Text style={styles.scoreNumber}>78</Text>
-            <Text style={styles.scoreMax}>/ 100</Text>
-          </View>
-        </View>
-        <View style={styles.scoreInfoCol}>
-          <Text style={styles.scoreTitle}>Recovery Index</Text>
-          <Text style={styles.scoreSubtitle}>Based on your last 7 days</Text>
-          <View style={styles.scoreBadge}>
-            <Feather name="trending-up" size={14} color={COLORS.successText} />
-            <Text style={styles.scoreBadgeText}> +5%</Text>
-            <Text style={styles.scoreBadgeLabel}> this week</Text>
-          </View>
-        </View>
-      </View>
-      <View style={styles.dotsRow}>
-        {[10, 10, 12, 12, 14, 16].map((size, i) => (
-          <View
-            key={i}
-            style={[
-              styles.dot,
-              {
-                width: size,
-                height: size,
-                borderRadius: size / 2,
-                backgroundColor: i < 4 ? '#C4B5D9' : i === 4 ? '#B09ED0' : '#9D85C7',
-              },
-            ]}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/* ─── 4. AUTO RECOVERIES TODAY ───────────────────────── */
-const RECOVERIES = [
-  {
-    id: '1',
-    icon: 'moon' as const,
-    title: 'Sleep Mode Activated',
-    subtitle: 'Wind-down sounds at 10:30 PM',
-    time: '10:30 PM',
-  },
-  {
-    id: '2',
-    icon: 'volume-2' as const,
-    title: 'Focus Soundscape',
-    subtitle: 'Ambient noise during deep work',
-    time: '2:00 PM',
-  },
-  {
-    id: '3',
-    icon: 'wind' as const,
-    title: 'Breathing Reminder',
-    subtitle: '4-7-8 technique every 2 hours',
-    time: 'Recurring',
-  },
-];
-
-function AutoRecoveries() {
-  return (
-    <View style={styles.sectionContainer} testID="auto-recoveries-section">
-      <View style={styles.sectionHeaderRow}>
-        <Feather name="zap" size={20} color={COLORS.primary} />
-        <Text style={styles.sectionTitle}> Auto Recoveries Today</Text>
-      </View>
-      {RECOVERIES.map((item) => (
-        <View key={item.id} style={styles.recoveryCard} testID={`recovery-card-${item.id}`}>
-          <View style={styles.recoveryIconWrap}>
-            <Feather name={item.icon} size={20} color={COLORS.primary} />
-          </View>
-          <View style={styles.recoveryTextCol}>
-            <Text style={styles.recoveryTitle}>{item.title}</Text>
-            <Text style={styles.recoverySubtitle}>{item.subtitle}</Text>
-          </View>
-          <View style={styles.timeBadge}>
-            <Text style={styles.timeBadgeText}>{item.time}</Text>
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-/* ─── 5. HOW WE KNOW YOU ─────────────────────────────── */
-const METRICS = [
-  { id: '1', icon: 'heart', title: 'Heart Rate', value: '68 bpm', label: 'Resting avg', color: '#7F00FF' },
-  { id: '2', icon: 'moon', title: 'Sleep', value: '7.2 hrs', label: 'Last night', color: '#7F00FF' },
-  { id: '3', icon: 'activity', title: 'Stress Level', value: 'Low', label: 'HRV based', color: '#7F00FF' },
-];
-
-function HowWeKnowYou() {
-  return (
-    <View style={styles.sectionContainer} testID="how-we-know-you-section">
-      <Text style={styles.sectionTitle}>How We Know You</Text>
-      <View style={styles.metricsRow}>
-        {METRICS.map((m) => (
-          <View key={m.id} style={styles.metricCard} testID={`metric-card-${m.id}`}>
-            <View style={styles.metricIconWrap}>
-              <Feather name={m.icon as any} size={20} color={m.color} />
-            </View>
-            <Text style={styles.metricLabel}>{m.title}</Text>
-            <Text style={styles.metricValue}>{m.value}</Text>
-            <Text style={styles.metricSub}>{m.label}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/* ─── 6. TODAY'S RECOVERY PLAN ───────────────────────── */
-const PLAN_ITEMS = [
-  { id: '1', title: 'Morning Stretch Routine', time: '8:00 AM' },
-  { id: '2', title: 'Guided Breathing Session', time: '12:30 PM' },
-  { id: '3', title: 'Evening Recovery Walk', time: '6:00 PM' },
-];
-
-function RecoveryPlan() {
-  return (
-    <View style={styles.sectionContainer} testID="recovery-plan-section">
-      <View style={styles.planHeaderRow}>
-        <Text style={styles.sectionTitle}>Today's Recovery Plan</Text>
-        <View style={styles.doneBadge}>
-          <Text style={styles.doneBadgeText}>0/3 done</Text>
-        </View>
-      </View>
-      {PLAN_ITEMS.map((item) => (
-        <View key={item.id} style={styles.planCard} testID={`plan-card-${item.id}`}>
-          <View style={styles.planIconWrap}>
-            <Feather name="clock" size={18} color={COLORS.primary} />
-          </View>
-          <View style={styles.planTextCol}>
-            <Text style={styles.planTitle}>{item.title}</Text>
-            <Text style={styles.planTime}>{item.time}</Text>
-          </View>
-          <View style={styles.planActions}>
-            <TouchableOpacity style={styles.planActionBtn} testID={`plan-alarm-${item.id}`}>
-              <MaterialCommunityIcons name="alarm" size={18} color={COLORS.textBody} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.planActionBtn} testID={`plan-calendar-${item.id}`}>
-              <MaterialCommunityIcons name="calendar-clock" size={18} color={COLORS.textBody} />
-            </TouchableOpacity>
-            <TouchableOpacity testID={`plan-check-${item.id}`}>
-              <LinearGradient
-                colors={['#9D4CDD', '#7F00FF']}
-                style={styles.checkBtn}
-              >
-                <Feather name="check" size={18} color="#FFF" />
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-/* ─── 7. VENT CTA ────────────────────────────────────── */
-function VentCTA() {
-  return (
-    <TouchableOpacity activeOpacity={0.9} testID="vent-cta-btn">
-      <LinearGradient
-        colors={['#9D4CDD', '#7F00FF']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.ventBanner}
+      {/* Logo */}
+      <Animated.View
+        style={[
+          styles.logoWrapper,
+          { opacity: logoOpacity, transform: [{ scale: logoScale }] },
+        ]}
+        testID="splash1-logo"
       >
-        <View style={styles.ventMicCircle}>
-          <Ionicons name="mic-outline" size={28} color="#FFF" />
-        </View>
-        <View style={styles.ventTextCol}>
-          <Text style={styles.ventTitle}>Vent with Nuo</Text>
-          <Text style={styles.ventSubtitle}>Tap to talk — I'm here to listen</Text>
-        </View>
-      </LinearGradient>
-    </TouchableOpacity>
-  );
-}
-
-/* ─── 8. BOTTOM TAB BAR ──────────────────────────────── */
-const TABS = [
-  { id: 'home', label: 'Home', icon: 'home', active: true },
-  { id: 'favs', label: 'My Favs', icon: 'heart', active: false },
-  { id: 'mic', label: '', icon: 'mic', active: false },
-  { id: 'progress', label: 'My Progress', icon: 'trending-up', active: false },
-  { id: 'you', label: 'You', icon: 'user', active: false },
-];
-
-function BottomTabBar() {
-  return (
-    <View style={styles.tabBarContainer} testID="bottom-tab-bar">
-      {TABS.map((tab) => {
-        if (tab.id === 'mic') {
-          return (
-            <TouchableOpacity key={tab.id} style={styles.fabWrapper} testID="tab-mic-btn">
-              <LinearGradient
-                colors={['#9D4CDD', '#7F00FF']}
-                style={styles.fabButton}
-              >
-                <Ionicons name="mic-outline" size={28} color="#FFF" />
-              </LinearGradient>
-            </TouchableOpacity>
-          );
-        }
-        return (
-          <TouchableOpacity
-            key={tab.id}
-            style={styles.tabItem}
-            testID={`tab-${tab.id}-btn`}
-          >
-            <Feather
-              name={tab.icon as any}
-              size={22}
-              color={tab.active ? COLORS.primary : COLORS.textBody}
+        <LinearGradient
+          colors={['#7F00FF', '#C97EB8']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.logoCircle}
+        >
+          <Svg width={36} height={36} viewBox="0 0 72 72" fill="none">
+            <Path
+              d="M 16 40 Q 28 24 36 36 Q 44 48 56 32"
+              stroke="#FFFFFF"
+              strokeWidth={4}
+              strokeLinecap="round"
+              fill="none"
             />
-            <Text
-              style={[
-                styles.tabLabel,
-                tab.active && styles.tabLabelActive,
-              ]}
-            >
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
+          </Svg>
+        </LinearGradient>
+      </Animated.View>
+
+      {/* Line 1 */}
+      <Animated.View style={[styles.textBlock, { opacity: line1Opacity }]}>
+        <Text style={styles.line1}>Built for high performers</Text>
+      </Animated.View>
+
+      {/* Line 2 */}
+      <Animated.View style={[styles.textBlock, { opacity: line2Opacity }]}>
+        <Text style={styles.line2}>who need to recover fast</Text>
+      </Animated.View>
+
+      {/* Line 3 */}
+      <Animated.View style={[styles.textBlock, { opacity: line3Opacity }]}>
+        <Text style={styles.line3}>Because slowing down isn't always an option</Text>
+      </Animated.View>
+    </Animated.View>
   );
 }
 
-/* ─── STYLES ─────────────────────────────────────────── */
 const styles = StyleSheet.create({
-  /* Root */
-  safeArea: {
+  container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
-  rootContainer: {
-    flex: 1,
+  logoWrapper: {
+    marginBottom: 40,
   },
-  loadingContainer: {
-    flex: 1,
+  logoCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.background,
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 120,
-  },
-
-  /* 1. Header */
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  textBlock: {
     alignItems: 'center',
-    marginBottom: 16,
   },
-  headerGreeting: {
-    fontSize: 28,
+  line1: {
+    fontSize: 32,
     fontFamily: 'Poppins_700Bold',
-    color: COLORS.textHeading,
-    letterSpacing: -0.5,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-    color: COLORS.textBody,
-    marginTop: 2,
-  },
-  headerIcons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  headerIconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#7F00FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-
-  /* 2. Calendar Pill */
-  calendarPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: COLORS.cardBg,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
-    gap: 8,
-    marginBottom: 20,
-    shadowColor: '#7F00FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 1,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  calendarText: {
-    fontSize: 14,
-    fontFamily: 'Inter_600SemiBold',
-    color: COLORS.textHeading,
-  },
-
-  /* 3. Recovery Scorecard */
-  scorecardContainer: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 24,
-    padding: 24,
-    marginBottom: 28,
-    shadowColor: '#7F00FF',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.04,
-    shadowRadius: 16,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  scorecardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-  },
-  scoreCircleWrapper: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scoreTextOverlay: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scoreNumber: {
-    fontSize: 36,
-    fontFamily: 'Poppins_700Bold',
-    color: COLORS.textHeading,
+    color: '#2A1F3D',
+    textAlign: 'center',
     lineHeight: 40,
   },
-  scoreMax: {
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-    color: COLORS.textBody,
-    marginTop: -2,
-  },
-  scoreInfoCol: {
-    flex: 1,
-  },
-  scoreTitle: {
-    fontSize: 18,
+  line2: {
+    fontSize: 28,
     fontFamily: 'Poppins_600SemiBold',
-    color: COLORS.textHeading,
-    marginBottom: 4,
-  },
-  scoreSubtitle: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    color: COLORS.textBody,
-    marginBottom: 10,
-  },
-  scoreBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.successBg,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-  scoreBadgeText: {
-    fontSize: 14,
-    fontFamily: 'Inter_600SemiBold',
-    color: COLORS.successText,
-  },
-  scoreBadgeLabel: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    color: COLORS.textBody,
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 18,
-  },
-  dot: {
-    backgroundColor: '#C4B5D9',
-  },
-
-  /* 4. Auto Recoveries */
-  sectionContainer: {
-    marginBottom: 28,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontFamily: 'Poppins_600SemiBold',
-    color: COLORS.textHeading,
-    letterSpacing: -0.3,
-  },
-  recoveryCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#7F00FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 1,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  recoveryIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: COLORS.iconBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  recoveryTextCol: {
-    flex: 1,
-  },
-  recoveryTitle: {
-    fontSize: 15,
-    fontFamily: 'Poppins_600SemiBold',
-    color: COLORS.textHeading,
-    marginBottom: 2,
-  },
-  recoverySubtitle: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    color: COLORS.textBody,
-  },
-  timeBadge: {
-    backgroundColor: '#F5F0FA',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    marginLeft: 8,
-  },
-  timeBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter_500Medium',
-    color: COLORS.textBody,
-  },
-
-  /* 5. How We Know You */
-  metricsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 14,
-  },
-  metricCard: {
-    flex: 1,
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 20,
-    paddingVertical: 18,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    shadowColor: '#7F00FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 1,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  metricIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: COLORS.iconBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  metricLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter_500Medium',
-    color: COLORS.textBody,
-    marginBottom: 4,
-  },
-  metricValue: {
-    fontSize: 20,
-    fontFamily: 'Poppins_700Bold',
-    color: COLORS.textHeading,
-    marginBottom: 2,
-  },
-  metricSub: {
-    fontSize: 11,
-    fontFamily: 'Inter_400Regular',
-    color: COLORS.textBody,
-  },
-
-  /* 6. Recovery Plan */
-  planHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  doneBadge: {
-    backgroundColor: '#F5F0FA',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-  doneBadgeText: {
-    fontSize: 13,
-    fontFamily: 'Inter_500Medium',
-    color: COLORS.textBody,
-  },
-  planCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#7F00FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 1,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  planIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: COLORS.iconBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  planTextCol: {
-    flex: 1,
-  },
-  planTitle: {
-    fontSize: 15,
-    fontFamily: 'Poppins_600SemiBold',
-    color: COLORS.textHeading,
-    marginBottom: 2,
-  },
-  planTime: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    color: COLORS.textBody,
-  },
-  planActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  planActionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: '#F5F0FA',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  /* 7. Vent CTA */
-  ventBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 28,
-  },
-  ventMicCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  ventTextCol: {
-    flex: 1,
-  },
-  ventTitle: {
-    fontSize: 18,
-    fontFamily: 'Poppins_600SemiBold',
-    color: COLORS.textInverse,
-    marginBottom: 4,
-  },
-  ventSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-    color: 'rgba(255,255,255,0.85)',
-  },
-
-  /* 8. Bottom Tab Bar */
-  tabBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    backgroundColor: COLORS.tabBarBg,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-    borderTopWidth: 1,
-    borderTopColor: '#EDE5F5',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  tabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 4,
-    minWidth: 60,
-  },
-  tabLabel: {
-    fontSize: 11,
-    fontFamily: 'Inter_500Medium',
-    color: COLORS.textBody,
+    color: '#7F00FF',
+    textAlign: 'center',
+    lineHeight: 36,
     marginTop: 4,
   },
-  tabLabelActive: {
-    color: COLORS.primary,
-  },
-  fabWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -30,
-  },
-  fabButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#7F00FF',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 8,
+  line3: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    fontStyle: 'italic',
+    color: '#7A7085',
+    textAlign: 'center',
+    marginTop: 12,
   },
 });
