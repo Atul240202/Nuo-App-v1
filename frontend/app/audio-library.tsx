@@ -396,6 +396,7 @@ function BottomTabBar() {
   const handleTab = (tabId: string) => {
     if (tabId === 'home') router.replace('/home');
     if (tabId === 'mic') router.push('/voice');
+    if (tabId === 'you') router.push('/profile');
     // favs is current page, do nothing
   };
 

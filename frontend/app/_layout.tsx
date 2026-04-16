@@ -58,6 +58,7 @@ export default function RootLayout() {
       <Stack.Screen name="home" />
       <Stack.Screen name="audio-library" />
       <Stack.Screen name="calendar" />
+      <Stack.Screen name="profile" />
     </Stack>
   );
 }
