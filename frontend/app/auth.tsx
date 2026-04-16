@@ -1,13 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, StatusBar } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
 import { LIGHT } from '../constants/theme';
 import Svg, { Path } from 'react-native-svg';
-
-// Required for web to close the auth session popup
-WebBrowser.maybeCompleteAuthSession();
 
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID;
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
@@ -26,28 +21,55 @@ function GoogleGIcon() {
 export default function AuthScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: GOOGLE_CLIENT_ID,
-    scopes: ['profile', 'email'],
-  });
-
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const accessToken = response.authentication?.accessToken;
-      if (accessToken) {
-        handleGoogleToken(accessToken);
-      }
-    } else if (response?.type === 'error') {
-      setError('Sign-in failed. Please try again.');
-      setLoading(false);
-    }
-  }, [response]);
-
-  const handleGoogleToken = async (accessToken: string) => {
+  const handleGoogleAuth = async () => {
     setLoading(true);
-    setError('');
+
+    if (Platform.OS === 'web') {
+      // Web: Direct Google OAuth redirect (avoids cross-origin iframe issues)
+      try {
+        const redirectUri = window.location.origin + '/auth-callback';
+        const authUrl =
+          'https://accounts.google.com/o/oauth2/v2/auth' +
+          `?client_id=${encodeURIComponent(GOOGLE_CLIENT_ID || '')}` +
+          `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+          '&response_type=token' +
+          '&scope=email%20profile' +
+          '&prompt=select_account';
+        window.location.href = authUrl;
+      } catch {
+        setLoading(false);
+      }
+    } else {
+      // Mobile: Use expo-web-browser to open Google OAuth
+      try {
+        const WebBrowser = require('expo-web-browser');
+        const AuthSession = require('expo-auth-session');
+        const redirectUri = AuthSession.makeRedirectUri({ scheme: 'frontend' });
+        const authUrl =
+          'https://accounts.google.com/o/oauth2/v2/auth' +
+          `?client_id=${encodeURIComponent(GOOGLE_CLIENT_ID || '')}` +
+          `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+          '&response_type=token' +
+          '&scope=email%20profile' +
+          '&prompt=select_account';
+
+        const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+        if (result.type === 'success' && result.url) {
+          const match = result.url.match(/access_token=([^&]+)/);
+          if (match) {
+            await sendTokenToBackend(match[1]);
+            return;
+          }
+        }
+        setLoading(false);
+      } catch {
+        setLoading(false);
+      }
+    }
+  };
+
+  const sendTokenToBackend = async (accessToken: string) => {
     try {
       const resp = await fetch(`${BACKEND_URL}/api/auth/google`, {
         method: 'POST',
@@ -55,33 +77,19 @@ export default function AuthScreen() {
         credentials: 'include',
         body: JSON.stringify({ access_token: accessToken }),
       });
-
-      if (!resp.ok) {
-        setError('Authentication failed. Please try again.');
-        setLoading(false);
-        return;
-      }
-
-      const data = await resp.json();
-      // Store session token for mobile (since cookies may not persist)
-      if (data.session_token) {
+      if (resp.ok) {
+        const data = await resp.json();
         try {
           const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-          await AsyncStorage.setItem('session_token', data.session_token);
+          if (data.session_token) await AsyncStorage.setItem('session_token', data.session_token);
         } catch {}
+        router.replace('/intro');
+      } else {
+        setLoading(false);
       }
-
-      router.replace('/intro');
     } catch {
-      setError('Network error. Please try again.');
       setLoading(false);
     }
-  };
-
-  const handlePress = () => {
-    setLoading(true);
-    setError('');
-    promptAsync();
   };
 
   return (
@@ -96,9 +104,9 @@ export default function AuthScreen() {
         <Text style={styles.sub}>Securely connect to personalize your recovery</Text>
 
         <TouchableOpacity
-          style={[styles.googleBtn, (!request || loading) && styles.googleBtnDisabled]}
-          onPress={handlePress}
-          disabled={!request || loading}
+          style={[styles.googleBtn, loading && styles.googleBtnDisabled]}
+          onPress={handleGoogleAuth}
+          disabled={loading}
           activeOpacity={0.8}
           testID="google-auth-btn"
         >
@@ -111,8 +119,6 @@ export default function AuthScreen() {
             </View>
           )}
         </TouchableOpacity>
-
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <Text style={styles.micro}>We only use this to personalize your experience</Text>
         <Text style={styles.footer}>Your data stays private</Text>
@@ -139,7 +145,6 @@ const styles = StyleSheet.create({
   googleBtnDisabled: { opacity: 0.6 },
   btnRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   googleBtnText: { fontSize: 16, fontFamily: 'Inter_500Medium', color: LIGHT.text },
-  errorText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: '#E53E3E', marginBottom: 12, textAlign: 'center' },
   micro: { fontSize: 13, fontFamily: 'Inter_400Regular', color: LIGHT.textDim, textAlign: 'center', marginBottom: 8 },
   footer: { fontSize: 13, fontFamily: 'Inter_400Regular', color: LIGHT.textMuted, textAlign: 'center' },
 });
