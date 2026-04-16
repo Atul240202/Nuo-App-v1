@@ -9,6 +9,7 @@ import {
   Platform,
   StatusBar,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import CircularProgress from '../components/CircularProgress';
@@ -53,6 +54,7 @@ export default function HomeScreen() {
 }
 
 function Header() {
+  const router = useRouter();
   return (
     <View style={styles.headerRow} testID="header-section">
       <View>
@@ -63,7 +65,7 @@ function Header() {
         <TouchableOpacity style={styles.headerIconBtn} testID="bluetooth-btn">
           <Feather name="bluetooth" size={20} color={COLORS.primary} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.headerIconBtn} testID="help-btn">
+        <TouchableOpacity style={styles.headerIconBtn} onPress={() => router.push('/debug')} testID="help-btn">
           <Feather name="help-circle" size={20} color={COLORS.textBody} />
         </TouchableOpacity>
       </View>

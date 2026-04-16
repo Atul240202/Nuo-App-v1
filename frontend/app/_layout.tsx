@@ -47,6 +47,7 @@ export default function RootLayout() {
       <Stack.Screen name="personalization" />
       <Stack.Screen name="transition" />
       <Stack.Screen name="voice" />
+      <Stack.Screen name="debug" />
       <Stack.Screen name="home" />
     </Stack>
   );

@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -11,6 +11,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
+from urllib.parse import urlencode
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -290,6 +291,166 @@ async def upload_voice(request: Request):
     duration = body.get("duration", 0)
     # In production, process audio with AI. For now, acknowledge receipt.
     return {"status": "received", "duration": duration, "message": "Voice input processed"}
+
+
+# ─── Google Calendar OAuth ─────────────────────────
+GCAL_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+GCAL_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
+GCAL_SCOPES = 'https://www.googleapis.com/auth/calendar.readonly'
+
+@api_router.get("/calendar/auth")
+async def calendar_auth(request: Request):
+    """Start Google Calendar OAuth - returns URL to redirect user to."""
+    # Build redirect URI pointing to our backend callback
+    base_url = str(request.base_url).rstrip('/')
+    # Use the public URL from the request's host header
+    host = request.headers.get('x-forwarded-host', request.headers.get('host', ''))
+    scheme = request.headers.get('x-forwarded-proto', 'https')
+    redirect_uri = f"{scheme}://{host}/api/calendar/callback"
+
+    params = urlencode({
+        'client_id': GCAL_CLIENT_ID,
+        'redirect_uri': redirect_uri,
+        'response_type': 'code',
+        'scope': f'email profile {GCAL_SCOPES}',
+        'access_type': 'offline',
+        'prompt': 'consent',
+        'state': 'calendar_sync',
+    })
+    auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{params}"
+    return {"auth_url": auth_url, "redirect_uri": redirect_uri}
+
+
+@api_router.get("/calendar/callback")
+async def calendar_callback(code: str = '', state: str = '', request: Request = None):
+    """Handle Google Calendar OAuth callback - exchange code for tokens."""
+    if not code:
+        return RedirectResponse("/debug?error=no_code")
+
+    host = request.headers.get('x-forwarded-host', request.headers.get('host', ''))
+    scheme = request.headers.get('x-forwarded-proto', 'https')
+    redirect_uri = f"{scheme}://{host}/api/calendar/callback"
+
+    # Exchange code for tokens
+    async with httpx.AsyncClient() as http_client:
+        token_resp = await http_client.post(
+            'https://oauth2.googleapis.com/token',
+            data={
+                'code': code,
+                'client_id': GCAL_CLIENT_ID,
+                'client_secret': GCAL_CLIENT_SECRET,
+                'redirect_uri': redirect_uri,
+                'grant_type': 'authorization_code',
+            }
+        )
+        token_data = token_resp.json()
+
+    if 'access_token' not in token_data:
+        error = token_data.get('error', 'unknown')
+        return RedirectResponse(f"/debug?error={error}")
+
+    # Get user email from token
+    async with httpx.AsyncClient() as http_client:
+        user_resp = await http_client.get(
+            'https://www.googleapis.com/oauth2/v2/userinfo',
+            headers={'Authorization': f'Bearer {token_data["access_token"]}'}
+        )
+        user_data = user_resp.json()
+
+    email = user_data.get('email', 'atuljha2402@gmail.com')
+
+    # Store calendar tokens in user document
+    await db.users.update_one(
+        {"email": email},
+        {"$set": {
+            "google_calendar_tokens": {
+                "access_token": token_data.get("access_token"),
+                "refresh_token": token_data.get("refresh_token"),
+                "expires_at": datetime.now(timezone.utc) + timedelta(seconds=token_data.get("expires_in", 3600)),
+            },
+            "calendar_synced": True,
+        }},
+        upsert=True
+    )
+
+    return RedirectResponse("/debug?calendar=connected")
+
+
+@api_router.get("/calendar/events")
+async def get_calendar_events(email: str = 'atuljha2402@gmail.com'):
+    """Fetch calendar events using stored tokens."""
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user or not user.get("google_calendar_tokens"):
+        raise HTTPException(status_code=400, detail="Calendar not connected. Please sync first.")
+
+    tokens = user["google_calendar_tokens"]
+    access_token = tokens["access_token"]
+
+    # Check if token expired, refresh if needed
+    expires_at = tokens.get("expires_at")
+    if expires_at and isinstance(expires_at, datetime):
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc) and tokens.get("refresh_token"):
+            # Refresh the token
+            async with httpx.AsyncClient() as http_client:
+                refresh_resp = await http_client.post(
+                    'https://oauth2.googleapis.com/token',
+                    data={
+                        'client_id': GCAL_CLIENT_ID,
+                        'client_secret': GCAL_CLIENT_SECRET,
+                        'refresh_token': tokens["refresh_token"],
+                        'grant_type': 'refresh_token',
+                    }
+                )
+                refresh_data = refresh_resp.json()
+                if 'access_token' in refresh_data:
+                    access_token = refresh_data["access_token"]
+                    await db.users.update_one(
+                        {"email": email},
+                        {"$set": {
+                            "google_calendar_tokens.access_token": access_token,
+                            "google_calendar_tokens.expires_at": datetime.now(timezone.utc) + timedelta(seconds=refresh_data.get("expires_in", 3600)),
+                        }}
+                    )
+
+    # Fetch events from Google Calendar
+    now = datetime.now(timezone.utc).isoformat()
+    max_time = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+
+    async with httpx.AsyncClient() as http_client:
+        events_resp = await http_client.get(
+            'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+            headers={'Authorization': f'Bearer {access_token}'},
+            params={
+                'timeMin': now,
+                'timeMax': max_time,
+                'maxResults': 30,
+                'singleEvents': 'true',
+                'orderBy': 'startTime',
+            }
+        )
+        if events_resp.status_code != 200:
+            error_detail = events_resp.json().get('error', {}).get('message', 'Failed to fetch')
+            raise HTTPException(status_code=events_resp.status_code, detail=error_detail)
+
+        events_data = events_resp.json()
+
+    # Return simplified events
+    events = []
+    for item in events_data.get('items', []):
+        start = item.get('start', {})
+        end = item.get('end', {})
+        events.append({
+            "id": item.get('id', ''),
+            "summary": item.get('summary', '(No title)'),
+            "start": start.get('dateTime', start.get('date', '')),
+            "end": end.get('dateTime', end.get('date', '')),
+            "status": item.get('status', ''),
+            "location": item.get('location', ''),
+        })
+
+    return {"events": events, "count": len(events), "email": email}
 
 
 # ─── Health check ──────────────────────────────────
