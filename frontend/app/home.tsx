@@ -285,8 +285,9 @@ function RecoveryPlan() {
 }
 
 function VentCTA({ isRecording, onPress }: { isRecording: boolean; onPress: () => void }) {
+  const router = useRouter();
   return (
-    <TouchableOpacity activeOpacity={0.9} onPress={onPress} testID="vent-cta-btn">
+    <TouchableOpacity activeOpacity={0.9} onPress={() => router.push('/voice')} testID="vent-cta-btn">
       <LinearGradient
         colors={isRecording ? ['#FF4466', '#CC2244'] : ['#9D4CDD', '#7F00FF']}
         start={{ x: 0, y: 0 }}
@@ -314,6 +315,7 @@ const TABS = [
 ];
 
 function BottomTabBar({ isRecording, onMicPress }: { isRecording: boolean; onMicPress: () => void }) {
+  const router = useRouter();
   const heartbeat = useRef(new Animated.Value(1)).current;
   const pulseRing = useRef(new Animated.Value(0)).current;
 
@@ -353,7 +355,7 @@ function BottomTabBar({ isRecording, onMicPress }: { isRecording: boolean; onMic
       {TABS.map((tab) => {
         if (tab.id === 'mic') {
           return (
-            <TouchableOpacity key={tab.id} style={styles.fabWrapper} onPress={onMicPress} testID="tab-mic-btn">
+            <TouchableOpacity key={tab.id} style={styles.fabWrapper} onPress={() => router.push('/voice')} testID="tab-mic-btn">
               {/* Pulse ring behind FAB when recording */}
               {isRecording && (
                 <Animated.View
