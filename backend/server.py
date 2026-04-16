@@ -11,7 +11,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
+import tempfile
 from urllib.parse import urlencode
+from fastapi import UploadFile, File, Form
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -278,19 +280,127 @@ async def save_personalization(request: Request):
     return user
 
 
-# ─── Voice Upload ──────────────────────────────────
+# ─── Voice Analysis ────────────────────────────────
+from voice_analysis import (
+    transcribe_audio, extract_acoustic_features, compute_emotion_scores,
+    analyse_calendar, generate_insight, score_audio_tracks
+)
+
+@api_router.post("/voice/analyze")
+async def analyze_voice(audio: UploadFile = File(...), user_id: str = Form("atuljha2402@gmail.com")):
+    """Full Nuo voice analysis pipeline."""
+    session_id = f"vs_{uuid.uuid4().hex[:12]}"
+
+    # 1. Save audio to tempfile
+    suffix = ".m4a" if audio.filename and audio.filename.endswith(".m4a") else ".wav"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        content = await audio.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        # 2. Transcribe with Whisper
+        transcription = transcribe_audio(tmp_path)
+        transcript = transcription["text"]
+
+        # 3. Extract acoustic features
+        acoustic = extract_acoustic_features(tmp_path)
+
+        # 4. Compute emotion + stress scores
+        scores = compute_emotion_scores(transcript, acoustic)
+
+        # 5. Fetch calendar events
+        cal_events = []
+        try:
+            user = await db.users.find_one({"email": user_id}, {"_id": 0})
+            if user and user.get("google_calendar_tokens"):
+                tokens = user["google_calendar_tokens"]
+                access_token = tokens["access_token"]
+                now_iso = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0).isoformat()
+                end_iso = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59).isoformat()
+                async with httpx.AsyncClient() as http_client:
+                    ev_resp = await http_client.get(
+                        'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+                        headers={'Authorization': f'Bearer {access_token}'},
+                        params={'timeMin': now_iso, 'timeMax': end_iso, 'singleEvents': 'true', 'orderBy': 'startTime'}
+                    )
+                    if ev_resp.status_code == 200:
+                        cal_events = ev_resp.json().get('items', [])
+                        cal_events = [{"start": e.get("start",{}).get("dateTime",""), "end": e.get("end",{}).get("dateTime","")} for e in cal_events]
+        except Exception as e:
+            logger.error(f"Calendar fetch error: {e}")
+
+        # 6. Analyse calendar
+        cal_data = analyse_calendar(cal_events)
+
+        # 7. Save voice session to MongoDB
+        await db.voice_sessions.insert_one({
+            "session_id": session_id,
+            "user_id": user_id,
+            "timestamp": datetime.now(timezone.utc),
+            "emotion": scores["emotion"],
+            "stress_score": scores["stress_score"],
+            "recovery_score": scores["recovery_score"],
+            "transcript": transcript,
+        })
+
+        # 8. Upsert calendar load
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        await db.calendar_loads.update_one(
+            {"user_id": user_id, "date": today},
+            {"$set": {**cal_data, "timestamp": datetime.now(timezone.utc)}},
+            upsert=True
+        )
+
+        # 9. Generate LLM insight
+        insight = await generate_insight(
+            scores["emotion"], scores["stress_score"], scores["recovery_score"],
+            transcript, cal_data
+        )
+
+        # 10. Score audio library
+        audio_tracks_raw = await db.audio_library.find({}, {"_id": 0}).to_list(20)
+        if not audio_tracks_raw:
+            audio_tracks_raw = _get_seed_tracks()
+        ranked_tracks = score_audio_tracks(scores["stress_score"], scores["emotion"], audio_tracks_raw)
+
+        return {
+            "session_id": session_id,
+            "stress_score": scores["stress_score"],
+            "recovery_score": scores["recovery_score"],
+            "meeting_load_score": cal_data["meeting_load_score"],
+            "capacity_left": cal_data["recovery_capacity_score"],
+            "transcript": transcript,
+            "emotion": scores["emotion"],
+            "insight": insight,
+            "audio_tracks": ranked_tracks,
+            "calendar_data": cal_data,
+        }
+    except Exception as e:
+        logger.error(f"Voice analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        import os as _os
+        try: _os.unlink(tmp_path)
+        except: pass
+
+
 @api_router.post("/voice/upload")
 async def upload_voice(request: Request):
-    token = request.cookies.get("session_token")
-    if not token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-
+    """Legacy endpoint - kept for compatibility."""
     body = await request.json()
-    duration = body.get("duration", 0)
-    # In production, process audio with AI. For now, acknowledge receipt.
-    return {"status": "received", "duration": duration, "message": "Voice input processed"}
+    return {"status": "received", "duration": body.get("duration", 0)}
+
+
+def _get_seed_tracks():
+    """Default audio library if none seeded."""
+    return [
+        {"id": "t1", "title": "Deep Ocean Theta", "desc": "4.5Hz binaural + ocean waves", "duration": "10:00", "stress_tag": "high", "emotion_tag": ["stressed", "tense"], "file_url": ""},
+        {"id": "t2", "title": "Forest Rain Reset", "desc": "6Hz theta + rain ambience", "duration": "10:00", "stress_tag": "medium", "emotion_tag": ["tense", "fatigued"], "file_url": ""},
+        {"id": "t3", "title": "Silent Valley", "desc": "5Hz binaural + white noise", "duration": "10:00", "stress_tag": "medium", "emotion_tag": ["neutral", "fatigued"], "file_url": ""},
+        {"id": "t4", "title": "Mountain Dawn", "desc": "7Hz alpha + birdsong", "duration": "10:00", "stress_tag": "low", "emotion_tag": ["positive", "neutral"], "file_url": ""},
+        {"id": "t5", "title": "Midnight Drift", "desc": "3Hz delta + warm noise", "duration": "10:00", "stress_tag": "high", "emotion_tag": ["stressed", "fatigued"], "file_url": ""},
+    ]
 
 
 # ─── Google Calendar OAuth ─────────────────────────
