@@ -391,12 +391,60 @@ function HowWeKnowYou({ sleepDebt, homeMetrics }: { sleepDebt: SleepData; homeMe
 }
 
 function AutoRecoveries({ items }: { items: AutoRecoveryItem[] }) {
+  const [dismissedItems, setDismissedItems] = useState<string[]>([]);
+  const [completedItems, setCompletedItems] = useState<string[]>([]);
+
   const getIcon = (label?: string) => {
     if (label?.includes('Focus')) return 'headphones' as const;
     if (label?.includes('Recovery')) return 'moon' as const;
     if (label?.includes('Relax')) return 'wind' as const;
-    return 'volume-2' as const;
+    if (label?.includes('Stretch')) return 'clock' as const;
+    return 'clock' as const;
   };
+
+  const handleSnooze = async (item: AutoRecoveryItem) => {
+    // Snooze/dismiss the intervention
+    try {
+      await fetch(`${BACKEND_URL}/api/interventions/snooze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ audio_id: item.audio_id, start_time: item.start_time }),
+      });
+    } catch {}
+    setDismissedItems(prev => [...prev, item.audio_id || item.start_time || '']);
+  };
+
+  const handleReschedule = async (item: AutoRecoveryItem) => {
+    // Reschedule to 30 mins later
+    try {
+      await fetch(`${BACKEND_URL}/api/interventions/reschedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ audio_id: item.audio_id, start_time: item.start_time, delay_mins: 30 }),
+      });
+    } catch {}
+    setDismissedItems(prev => [...prev, item.audio_id || item.start_time || '']);
+  };
+
+  const handleComplete = async (item: AutoRecoveryItem) => {
+    // Mark as completed
+    try {
+      await fetch(`${BACKEND_URL}/api/interventions/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ audio_id: item.audio_id, start_time: item.start_time }),
+      });
+    } catch {}
+    setCompletedItems(prev => [...prev, item.audio_id || item.start_time || '']);
+  };
+
+  const visibleItems = items.filter(item => {
+    const key = item.audio_id || item.start_time || '';
+    return !dismissedItems.includes(key);
+  });
 
   return (
     <View style={styles.sectionContainer} testID="auto-recoveries-section">
@@ -405,11 +453,8 @@ function AutoRecoveries({ items }: { items: AutoRecoveryItem[] }) {
           <Feather name="zap" size={18} color={COLORS.primary} />
           <Text style={styles.sectionTitle}>Today's Auto Recoveries</Text>
         </View>
-        <View style={styles.doneBadge}>
-          <Text style={styles.doneBadgeText}>{items.length} scheduled</Text>
-        </View>
       </View>
-      {items.length === 0 ? (
+      {visibleItems.length === 0 ? (
         <View style={styles.planCard}>
           <View style={styles.planIconWrap}>
             <Feather name="calendar" size={18} color={COLORS.textBody} />
@@ -420,27 +465,47 @@ function AutoRecoveries({ items }: { items: AutoRecoveryItem[] }) {
           </View>
         </View>
       ) : (
-        items.map((item, idx) => (
-          <View key={item.audio_id || idx} style={styles.planCard} testID={`recovery-card-${idx}`}>
-            <View style={styles.planIconWrap}>
-              <Feather name={getIcon(item.audio_label)} size={18} color={COLORS.primary} />
-            </View>
-            <View style={styles.planTextCol}>
-              <Text style={styles.planTitle}>{item.audio_title || 'Scheduled Session'}</Text>
-              <Text style={styles.planTime}>
-                {item.start_time} · {item.duration_min || 10} min
-              </Text>
-              {item.reason && (
-                <Text style={styles.planReason} numberOfLines={2}>
-                  {item.reason}
+        visibleItems.map((item, idx) => {
+          const key = item.audio_id || item.start_time || String(idx);
+          const isCompleted = completedItems.includes(key);
+          
+          return (
+            <View key={key} style={[styles.planCard, isCompleted && styles.planCardCompleted]} testID={`recovery-card-${idx}`}>
+              <View style={styles.planIconWrap}>
+                <Feather name={getIcon(item.audio_label)} size={18} color={COLORS.primary} />
+              </View>
+              <View style={styles.planTextCol}>
+                <Text style={[styles.planTitle, isCompleted && styles.planTitleCompleted]}>
+                  {item.audio_title || 'Scheduled Session'}
                 </Text>
-              )}
+                <Text style={styles.planTime}>{item.start_time}</Text>
+              </View>
+              <View style={styles.actionIconsRow}>
+                <TouchableOpacity 
+                  style={styles.actionIconBtn} 
+                  onPress={() => handleSnooze(item)}
+                  testID={`snooze-${idx}`}
+                >
+                  <Feather name="bell-off" size={18} color={COLORS.textBody} />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.actionIconBtn} 
+                  onPress={() => handleReschedule(item)}
+                  testID={`reschedule-${idx}`}
+                >
+                  <Feather name="clock" size={18} color={COLORS.textBody} />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.actionIconBtn, styles.completeBtn, isCompleted && styles.completeBtnDone]} 
+                  onPress={() => handleComplete(item)}
+                  testID={`complete-${idx}`}
+                >
+                  <Feather name="check" size={18} color="#FFF" />
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.timeBadge}>
-              <Text style={styles.timeBadgeText}>{item.audio_label || 'Recovery'}</Text>
-            </View>
-          </View>
-        ))
+          );
+        })
       )}
     </View>
   );
@@ -952,6 +1017,32 @@ const styles = StyleSheet.create({
   timeBadgeText: {
     fontSize: 12,
     fontFamily: 'Inter_500Medium',
+    color: COLORS.textBody,
+  },
+  actionIconsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#F5F0FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completeBtn: {
+    backgroundColor: COLORS.primary,
+  },
+  completeBtnDone: {
+    backgroundColor: '#38A169',
+  },
+  planCardCompleted: {
+    opacity: 0.6,
+  },
+  planTitleCompleted: {
+    textDecorationLine: 'line-through',
     color: COLORS.textBody,
   },
   ventBanner: {
