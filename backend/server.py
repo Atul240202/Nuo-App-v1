@@ -504,7 +504,7 @@ async def calendar_callback(code: str = '', state: str = '', request: Request = 
         error = token_data.get('error', 'unknown')
         return RedirectResponse(f"/debug?error={error}")
 
-    # Get user email from token
+    # Get user email from token to know which Google account was used for calendar
     async with httpx.AsyncClient() as http_client:
         user_resp = await http_client.get(
             'https://www.googleapis.com/oauth2/v2/userinfo',
@@ -512,32 +512,67 @@ async def calendar_callback(code: str = '', state: str = '', request: Request = 
         )
         user_data = user_resp.json()
 
-    email = user_data.get('email')
-    if not email:
+    google_calendar_email = user_data.get('email')
+    if not google_calendar_email:
         return RedirectResponse(f"/debug?error=no_email_from_google")
+    
+    # Try to get the logged-in user from session cookie
+    session_token = request.cookies.get("session_token")
+    logged_in_email = None
+    
+    if session_token:
+        session = await db.user_sessions.find_one(
+            {"session_token": session_token, "expires_at": {"$gt": datetime.now(timezone.utc)}},
+            {"_id": 0}
+        )
+        if session:
+            user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+            if user:
+                logged_in_email = user.get("email")
+    
+    # Use logged-in user's email if available, otherwise use Google calendar email
+    target_email = logged_in_email if logged_in_email else google_calendar_email
+    
     real_name = user_data.get('name', '')
     picture = user_data.get('picture', '')
 
-    # Store calendar tokens + update real name/picture
+    # Store calendar tokens for the target user
     await db.users.update_one(
-        {"email": email},
+        {"email": target_email},
         {"$set": {
             "google_calendar_tokens": {
                 "access_token": token_data.get("access_token"),
                 "refresh_token": token_data.get("refresh_token"),
                 "expires_at": datetime.now(timezone.utc) + timedelta(seconds=token_data.get("expires_in", 3600)),
+                "calendar_email": google_calendar_email,  # Track which Google account was used
             },
             "calendar_synced": True,
-            "name": real_name if real_name else "Nuo User",
-            "picture": picture,
+            "name": real_name if real_name and not logged_in_email else None,  # Only update name if new user
+            "picture": picture if picture and not logged_in_email else None,  # Only update picture if new user
         }},
         upsert=True
     )
+    
+    # Remove None values from the update
+    if logged_in_email:
+        # Just update calendar tokens without changing name/picture
+        await db.users.update_one(
+            {"email": target_email},
+            {"$set": {
+                "google_calendar_tokens": {
+                    "access_token": token_data.get("access_token"),
+                    "refresh_token": token_data.get("refresh_token"),
+                    "expires_at": datetime.now(timezone.utc) + timedelta(seconds=token_data.get("expires_in", 3600)),
+                    "calendar_email": google_calendar_email,
+                },
+                "calendar_synced": True,
+            }}
+        )
 
     # Redirect based on source
     if state == 'onboarding':
         return RedirectResponse("/transition")
-    return RedirectResponse("/debug?calendar=connected")
+    return RedirectResponse("/calendar?calendar=connected")
 
 
 @api_router.get("/calendar/events")
