@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Platform } from 'react-native';
 import { apiFetch, setSessionToken, getSessionToken } from '../utils/api';
 
 export interface NuoUser {
@@ -67,6 +68,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     (async () => {
+      // CRITICAL: If returning from OAuth callback, skip the /me check.
+      // AuthCallback will exchange the session_id and establish the session first.
+      try {
+        if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hash?.includes('session_id=')) {
+          setLoading(false);
+          return;
+        }
+      } catch {}
       await refresh();
       setLoading(false);
     })();
