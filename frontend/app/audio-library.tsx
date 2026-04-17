@@ -11,6 +11,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
+// Audio cache for instant replay
+const audioCache = new Map<string, Audio.Sound>();
+
 const COLORS = {
   background: '#F7F0F5',
   primary: '#7F00FF',
@@ -67,7 +70,12 @@ export default function AudioLibraryScreen() {
   useEffect(() => {
     fetchTracks();
     return () => {
-      soundRef.current?.unloadAsync();
+      // Cleanup: unload all cached sounds when component unmounts
+      soundRef.current?.pauseAsync();
+      audioCache.forEach((sound) => {
+        sound.unloadAsync().catch(() => {});
+      });
+      audioCache.clear();
     };
   }, [fetchTracks]);
 
@@ -100,10 +108,9 @@ export default function AudioLibraryScreen() {
       return;
     }
 
-    // Different track — unload previous
+    // Different track — pause previous but don't unload (keep in cache)
     if (soundRef.current) {
-      await soundRef.current.unloadAsync();
-      soundRef.current = null;
+      await soundRef.current.pauseAsync();
     }
 
     setActiveTrackId(track.audio_id);
@@ -115,12 +122,29 @@ export default function AudioLibraryScreen() {
 
     try {
       await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+      
+      // Check if track is already cached
+      const cachedSound = audioCache.get(track.audio_id);
+      if (cachedSound) {
+        // Reuse cached sound - instant playback!
+        soundRef.current = cachedSound;
+        cachedSound.setOnPlaybackStatusUpdate(onPlaybackStatusUpdate);
+        // Set real-time progress updates (every 100ms)
+        await cachedSound.setProgressUpdateIntervalAsync(100);
+        await cachedSound.setPositionAsync(0);
+        await cachedSound.playAsync();
+        setIsPlaying(true);
+        return;
+      }
+
+      // Not cached - create new sound with real-time progress updates
       const { sound } = await Audio.Sound.createAsync(
         { uri: track.file_url },
-        { shouldPlay: true },
+        { shouldPlay: true, progressUpdateIntervalMillis: 100 },
         onPlaybackStatusUpdate
       );
       soundRef.current = sound;
+      audioCache.set(track.audio_id, sound); // Cache for instant replay
       setIsPlaying(true);
     } catch (e) {
       console.log('Audio playback error', e);

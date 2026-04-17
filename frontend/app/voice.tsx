@@ -203,7 +203,7 @@ export default function VoiceScreen() {
         stress_score: 62, recovery_score: 45, transcript: "Feeling overwhelmed with work today.", emotion: "tense",
         calendar_data: { meetings_count: 6, back_to_back: 3, meeting_load_score: 78, recovery_capacity_score: 22, avg_gap_mins: 12 },
         audio_tracks: [
-          { audio_id: "aud_df_bin_001", title: "40Hz Binaural Focus", label: "Deep Focus", duration_sec: 600, recommended: true, file_url: "https://pause-v1-audio.sfo3.digitaloceanspaces.com/NY%20Audio%20Interventions/Alpha%20Waves%20Heal%20Damage%20In%20The%20Body%2C%20Brain%20Massage%20While%20You%20Sleep%2C%20Improve%20Your%20Memory%20%5BpxqW0tgb5A%5D.mp3" },
+          { audio_id: "aud_df_bin_001", title: "40Hz Binaural Focus", label: "Deep Focus", duration_sec: 600, recommended: true, file_url: "https://pause-v1-audio.sfo3.digitaloceanspaces.com/NY%20Audio%20Interventions/Alpha%20Waves%20Heal%20Damage%20In%20The%20Body%2C%20Brain%20Massage%20While%20You%20Sleep%2C%20Improve%20Your%20Memory%20%5Bpxq5W0tgb5A%5D.mp3" },
           { audio_id: "aud_df_bin_002", title: "Alpha Wave Concentration", label: "Deep Recovery", duration_sec: 600, recommended: false, file_url: "https://pause-v1-audio.sfo3.cdn.digitaloceanspaces.com/NY%20Audio%20Interventions/Focus%20Music%20%E2%80%A2%20Enter%20Hyperfocus%20Mode%20for%20Deep%20Work%20&%20Flow%20%5BE79seWbsZds%5D.mp3" },
           { audio_id: "aud_df_flo_003", title: "Flow State Ambient", label: "High Relaxation", duration_sec: 600, recommended: false, file_url: "https://pause-v1-audio.sfo3.cdn.digitaloceanspaces.com/NY%20Audio%20Interventions/Instant%20Relief%20from%20Stress%20and%20Anxiety%20_%20Detox%20Negative%20Emotions,%20Calm%20Nature%20Healing%20Sleep%20Music%E2%98%8558%20%5B79kpoGF8KWU%5D.mp3" },
         ],
@@ -307,7 +307,20 @@ export default function VoiceScreen() {
 /* ─── AUDIO CARD WITH PLAYBACK ──────────────────── */
 function AudioCard({ track }: { track: any }) {
   const [playing, setPlaying] = useState(false);
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
   const soundRef = useRef<Audio.Sound | null>(null);
+
+  const onPlaybackStatusUpdate = (status: any) => {
+    if (status.isLoaded) {
+      setPosition(status.positionMillis || 0);
+      setDuration(status.durationMillis || 0);
+      if (status.didJustFinish) {
+        setPlaying(false);
+        setPosition(0);
+      }
+    }
+  };
 
   const togglePlay = async () => {
     if (playing && soundRef.current) {
@@ -326,14 +339,11 @@ function AudioCard({ track }: { track: any }) {
       const url = track.file_url;
       if (!url) return;
 
+      // Real-time progress updates with 100ms interval
       const { sound } = await Audio.Sound.createAsync(
         { uri: url },
-        { shouldPlay: true },
-        (status) => {
-          if (status.isLoaded && status.didJustFinish) {
-            setPlaying(false);
-          }
-        }
+        { shouldPlay: true, progressUpdateIntervalMillis: 100 },
+        onPlaybackStatusUpdate
       );
       soundRef.current = sound;
       setPlaying(true);
