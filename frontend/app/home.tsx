@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import CircularProgress from '../components/CircularProgress';
+import { apiFetch } from '../utils/api';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -80,9 +81,7 @@ export default function HomeScreen() {
 
   const fetchAutoRecoveries = async () => {
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/interventions/today`, {
-        credentials: 'include',
-      });
+      const resp = await apiFetch(`/api/interventions/today`);
       if (resp.ok) {
         const data = await resp.json();
         if (data.interventions && data.interventions.length > 0) {
@@ -90,11 +89,9 @@ export default function HomeScreen() {
           return;
         }
       }
-      const genResp = await fetch(`${BACKEND_URL}/api/interventions/generate`, {
+      const genResp = await apiFetch(`/api/interventions/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({}),
+        jsonBody: {},
       });
       if (genResp.ok) {
         const genData = await genResp.json();
@@ -110,9 +107,7 @@ export default function HomeScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const userResp = await fetch(`${BACKEND_URL}/api/auth/me`, { 
-          credentials: 'include' 
-        });
+        const userResp = await apiFetch(`/api/auth/me`);
         if (userResp.ok) {
           const user = await userResp.json();
           const firstName = (user.name || '').split(' ')[0];
@@ -123,9 +118,7 @@ export default function HomeScreen() {
       }
 
       try {
-        const resp = await fetch(`${BACKEND_URL}/api/recovery-index`, {
-          credentials: 'include',
-        });
+        const resp = await apiFetch(`/api/recovery-index`);
         if (resp.ok) {
           const data = await resp.json();
           setRecoveryIndex(data.recovery_index ?? 0);
@@ -136,9 +129,7 @@ export default function HomeScreen() {
       }
 
       try {
-        const resp = await fetch(`${BACKEND_URL}/api/sleep-debt`, {
-          credentials: 'include',
-        });
+        const resp = await apiFetch(`/api/sleep-debt`);
         if (resp.ok) {
           const data = await resp.json();
           setSleepDebt({
@@ -155,9 +146,7 @@ export default function HomeScreen() {
       await fetchAutoRecoveries();
 
       try {
-        const resp = await fetch(`${BACKEND_URL}/api/metrics/home`, {
-          credentials: 'include',
-        });
+        const resp = await apiFetch(`/api/metrics/home`);
         if (resp.ok) {
           const data = await resp.json();
           setHomeMetrics(data);
@@ -177,11 +166,9 @@ export default function HomeScreen() {
         setRecording(null);
         setIsRecording(false);
         try {
-          await fetch(`${BACKEND_URL}/api/voice/upload`, {
+          await apiFetch(`/api/voice/upload`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ duration }),
+            jsonBody: { duration },
           });
         } catch (error) {
           console.error('Error uploading voice:', error);
@@ -405,11 +392,9 @@ function AutoRecoveries({ items }: { items: AutoRecoveryItem[] }) {
   const handleSnooze = async (item: AutoRecoveryItem) => {
     // Snooze/dismiss the intervention
     try {
-      await fetch(`${BACKEND_URL}/api/interventions/snooze`, {
+      await apiFetch(`/api/interventions/snooze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ audio_id: item.audio_id, start_time: item.start_time }),
+        jsonBody: { audio_id: item.audio_id, start_time: item.start_time },
       });
     } catch {}
     setDismissedItems(prev => [...prev, item.audio_id || item.start_time || '']);
@@ -418,11 +403,9 @@ function AutoRecoveries({ items }: { items: AutoRecoveryItem[] }) {
   const handleReschedule = async (item: AutoRecoveryItem) => {
     // Reschedule to 30 mins later
     try {
-      await fetch(`${BACKEND_URL}/api/interventions/reschedule`, {
+      await apiFetch(`/api/interventions/reschedule`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ audio_id: item.audio_id, start_time: item.start_time, delay_mins: 30 }),
+        jsonBody: { audio_id: item.audio_id, start_time: item.start_time, delay_mins: 30 },
       });
     } catch {}
     setDismissedItems(prev => [...prev, item.audio_id || item.start_time || '']);
@@ -431,11 +414,9 @@ function AutoRecoveries({ items }: { items: AutoRecoveryItem[] }) {
   const handleComplete = async (item: AutoRecoveryItem) => {
     // Mark as completed
     try {
-      await fetch(`${BACKEND_URL}/api/interventions/complete`, {
+      await apiFetch(`/api/interventions/complete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ audio_id: item.audio_id, start_time: item.start_time }),
+        jsonBody: { audio_id: item.audio_id, start_time: item.start_time },
       });
     } catch {}
     setCompletedItems(prev => [...prev, item.audio_id || item.start_time || '']);
