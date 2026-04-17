@@ -469,13 +469,13 @@ function AutoRecoveries({ items }: { items: AutoRecoveryItem[] }) {
                 >
                   <Feather name="bell-off" size={18} color={COLORS.textBody} />
                 </TouchableOpacity>
-                <TouchableOpacity 
+                {/* <TouchableOpacity 
                   style={styles.actionIconBtn} 
                   onPress={() => handleReschedule(item)}
                   testID={`reschedule-${idx}`}
                 >
                   <Feather name="clock" size={18} color={COLORS.textBody} />
-                </TouchableOpacity>
+                </TouchableOpacity> */}
                 <TouchableOpacity 
                   style={[styles.actionIconBtn, styles.completeBtn, isCompleted && styles.completeBtnDone]} 
                   onPress={() => handleComplete(item)}
@@ -1105,23 +1105,23 @@ const styles = StyleSheet.create({
   },
   pulseRing: {
     position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#FF4466',
   },
   waveRing: {
     position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     borderWidth: 2.5,
     borderColor: '#7F00FF',
   },
   fabButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#7F00FF',

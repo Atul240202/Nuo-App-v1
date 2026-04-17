@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, StatusBar, Platform, ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity, StatusBar, Platform, ActivityIndicator, Alert, Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -67,16 +67,29 @@ export default function PaywallScreen() {
         method: 'POST',
         jsonBody: { plan_id: selected },
       });
-      if (!orderResp.ok) { setLoading(false); return; }
+      if (!orderResp.ok) { 
+        console.error('Failed to create order');
+        setLoading(false); 
+        return; 
+      }
       const orderData = await orderResp.json();
+      console.log('Order created:', orderData);
 
       if (Platform.OS === 'web') {
         // Load Razorpay script if not loaded
         if (!(window as any).Razorpay) {
-          await new Promise<void>((resolve) => {
+          console.log('Loading Razorpay script...');
+          await new Promise<void>((resolve, reject) => {
             const script = document.createElement('script');
             script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-            script.onload = () => resolve();
+            script.onload = () => {
+              console.log('Razorpay script loaded');
+              resolve();
+            };
+            script.onerror = () => {
+              console.error('Failed to load Razorpay script');
+              reject(new Error('Razorpay script failed'));
+            };
             document.head.appendChild(script);
           });
         }
@@ -89,6 +102,7 @@ export default function PaywallScreen() {
           description: plan.label,
           order_id: orderData.order_id,
           handler: async (response: any) => {
+            console.log('Payment successful:', response);
             // Verify payment
             try {
               const verifyResp = await apiFetch(`/api/payment/verify`, {
@@ -101,19 +115,55 @@ export default function PaywallScreen() {
               });
               if (verifyResp.ok) {
                 router.replace('/voice');
+              } else {
+                console.error('Payment verification failed');
               }
-            } catch {}
+            } catch (e) {
+              console.error('Verification error:', e);
+            }
             setLoading(false);
           },
-          modal: { ondismiss: () => setLoading(false) },
+          modal: { 
+            ondismiss: () => {
+              console.log('Razorpay modal dismissed');
+              setLoading(false);
+            }
+          },
           prefill: { email: user?.email || '' },
           theme: { color: '#8b5cf6' },
         };
 
+        console.log('Opening Razorpay with options:', { ...options, key: '***' });
         const rzp = new (window as any).Razorpay(options);
+        rzp.on('payment.failed', (response: any) => {
+          console.error('Payment failed:', response.error);
+          setLoading(false);
+        });
         rzp.open();
+      } else {
+        // Native - Use WebBrowser to open payment page
+        const paymentUrl = `${BACKEND_URL}/api/payment/page?order_id=${orderData.order_id}&plan_id=${selected}&amount=${orderData.amount}`;
+        Alert.alert(
+          'Complete Payment',
+          'You will be redirected to complete the payment. Please return to the app after completing.',
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => setLoading(false) },
+            { 
+              text: 'Continue', 
+              onPress: async () => {
+                try {
+                  await Linking.openURL(paymentUrl);
+                } catch (e) {
+                  console.error('Failed to open payment URL:', e);
+                }
+                setLoading(false);
+              }
+            },
+          ]
+        );
       }
-    } catch {
+    } catch (e) {
+      console.error('Purchase error:', e);
       setLoading(false);
     }
   };
