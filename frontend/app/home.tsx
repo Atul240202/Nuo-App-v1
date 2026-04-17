@@ -13,11 +13,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import CircularProgress from '../components/CircularProgress';
-import { useAuth } from '../contexts/AuthContext';
-import { apiFetch } from '../utils/api';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -36,21 +34,55 @@ const COLORS = {
   iconBg: '#F0E5FF',
 };
 
+interface SleepData {
+  avg: number;
+  latest: number;
+  cumulative: number;
+  records: Array<{ debt_hours: number }>;
+}
+
+interface HomeMetrics {
+  back_to_back: number;
+  meetings_count: number;
+  avg_stress_3d: number;
+  stress_sessions_count: number;
+}
+
+interface AutoRecoveryItem {
+  audio_id?: string;
+  audio_label?: string;
+  audio_title?: string;
+  start_time?: string;
+  duration_min?: number;
+  reason?: string;
+}
+
 export default function HomeScreen() {
-  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [userName, setUserName] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recoveryIndex, setRecoveryIndex] = useState(0);
   const [weeklyMomentum, setWeeklyMomentum] = useState(0);
-  const [sleepDebt, setSleepDebt] = useState({ avg: 0, latest: 0, cumulative: 0, records: [] as any[] });
-  const [autoRecoveries, setAutoRecoveries] = useState<any[]>([]);
-  const [homeMetrics, setHomeMetrics] = useState({ back_to_back: 0, meetings_count: 0, avg_stress_3d: 0, stress_sessions_count: 0 });
+  const [sleepDebt, setSleepDebt] = useState<SleepData>({ 
+    avg: 0, 
+    latest: 0, 
+    cumulative: 0, 
+    records: [] 
+  });
+  const [autoRecoveries, setAutoRecoveries] = useState<AutoRecoveryItem[]>([]);
+  const [homeMetrics, setHomeMetrics] = useState<HomeMetrics>({ 
+    back_to_back: 0, 
+    meetings_count: 0, 
+    avg_stress_3d: 0, 
+    stress_sessions_count: 0 
+  });
 
   const fetchAutoRecoveries = async () => {
     try {
-      // 1. Try fetching today's saved interventions
-      const resp = await apiFetch(`/api/interventions/today`);
+      const resp = await fetch(`${BACKEND_URL}/api/interventions/today`, {
+        credentials: 'include',
+      });
       if (resp.ok) {
         const data = await resp.json();
         if (data.interventions && data.interventions.length > 0) {
@@ -58,10 +90,11 @@ export default function HomeScreen() {
           return;
         }
       }
-      // 2. If none, generate a new one
-      const genResp = await apiFetch(`/api/interventions/generate`, {
+      const genResp = await fetch(`${BACKEND_URL}/api/interventions/generate`, {
         method: 'POST',
-        jsonBody: {},
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({}),
       });
       if (genResp.ok) {
         const genData = await genResp.json();
@@ -69,34 +102,43 @@ export default function HomeScreen() {
           setAutoRecoveries([genData.intervention]);
         }
       }
-    } catch {}
+    } catch (error) {
+      console.error('Error fetching auto recoveries:', error);
+    }
   };
 
   useEffect(() => {
-    // Redirect to auth if not logged in
-    if (!authLoading && !user) {
-      require('expo-router').router.replace('/auth');
-      return;
-    }
-    if (!user) return;
-
     (async () => {
       try {
-        const firstName = (user.name || '').split(' ')[0];
-        setUserName(firstName || 'there');
-      } catch {}
-      // Fetch recovery index
+        const userResp = await fetch(`${BACKEND_URL}/api/auth/me`, { 
+          credentials: 'include' 
+        });
+        if (userResp.ok) {
+          const user = await userResp.json();
+          const firstName = (user.name || '').split(' ')[0];
+          setUserName(firstName || 'there');
+        }
+      } catch (error) {
+        console.error('Error fetching user:', error);
+      }
+
       try {
-        const resp = await apiFetch(`/api/recovery-index`);
+        const resp = await fetch(`${BACKEND_URL}/api/recovery-index`, {
+          credentials: 'include',
+        });
         if (resp.ok) {
           const data = await resp.json();
           setRecoveryIndex(data.recovery_index ?? 0);
           setWeeklyMomentum(data.weekly_momentum ?? 0);
         }
-      } catch {}
-      // Fetch sleep debt
+      } catch (error) {
+        console.error('Error fetching recovery index:', error);
+      }
+
       try {
-        const resp = await apiFetch(`/api/sleep-debt`);
+        const resp = await fetch(`${BACKEND_URL}/api/sleep-debt`, {
+          credentials: 'include',
+        });
         if (resp.ok) {
           const data = await resp.json();
           setSleepDebt({
@@ -106,30 +148,34 @@ export default function HomeScreen() {
             records: data.records ?? [],
           });
         }
-      } catch {}
-      // Fetch auto recoveries
+      } catch (error) {
+        console.error('Error fetching sleep debt:', error);
+      }
+
       await fetchAutoRecoveries();
-      // Fetch home metrics (back-to-back, voice stress avg)
+
       try {
-        const resp = await apiFetch(`/api/metrics/home`);
+        const resp = await fetch(`${BACKEND_URL}/api/metrics/home`, {
+          credentials: 'include',
+        });
         if (resp.ok) {
           const data = await resp.json();
           setHomeMetrics(data);
         }
-      } catch {}
+      } catch (error) {
+        console.error('Error fetching home metrics:', error);
+      }
     })();
-  }, [authLoading, user]);
+  }, []);
 
   const toggleRecording = async () => {
     if (isRecording && recording) {
-      // Stop
       try {
         await recording.stopAndUnloadAsync();
         const status = await recording.getStatusAsync();
         const duration = status.durationMillis || 0;
         setRecording(null);
         setIsRecording(false);
-        // Send to backend
         try {
           await fetch(`${BACKEND_URL}/api/voice/upload`, {
             method: 'POST',
@@ -137,23 +183,29 @@ export default function HomeScreen() {
             credentials: 'include',
             body: JSON.stringify({ duration }),
           });
-        } catch {}
-      } catch {
+        } catch (error) {
+          console.error('Error uploading voice:', error);
+        }
+      } catch (error) {
+        console.error('Error stopping recording:', error);
         setRecording(null);
         setIsRecording(false);
       }
     } else {
-      // Start
       try {
         const { status } = await Audio.requestPermissionsAsync();
         if (status !== 'granted') return;
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+        await Audio.setAudioModeAsync({ 
+          allowsRecordingIOS: true, 
+          playsInSilentModeIOS: true 
+        });
         const { recording: rec } = await Audio.Recording.createAsync(
           Audio.RecordingOptionsPresets.HIGH_QUALITY
         );
         setRecording(rec);
         setIsRecording(true);
-      } catch {
+      } catch (error) {
+        console.error('Error starting recording:', error);
         setIsRecording(false);
       }
     }
@@ -173,9 +225,9 @@ export default function HomeScreen() {
           <RecoveryScorecard score={recoveryIndex} momentum={weeklyMomentum} />
           <AutoRecoveries items={autoRecoveries} />
           <HowWeKnowYou sleepDebt={sleepDebt} homeMetrics={homeMetrics} />
-          <VentCTA isRecording={isRecording} onPress={toggleRecording} />
+          <VentCTA />
         </ScrollView>
-        <BottomTabBar isRecording={isRecording} onMicPress={toggleRecording} />
+        <BottomTabBar isRecording={isRecording} />
       </View>
     </SafeAreaView>
   );
@@ -194,7 +246,11 @@ function Header({ name }: { name: string }) {
         <TouchableOpacity style={styles.headerIconBtn} testID="bluetooth-btn">
           <Feather name="bluetooth" size={20} color={COLORS.primary} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.headerIconBtn} onPress={() => router.push('/debug')} testID="help-btn">
+        <TouchableOpacity 
+          style={styles.headerIconBtn} 
+          onPress={() => router.push('/debug')} 
+          testID="help-btn"
+        >
           <Feather name="help-circle" size={20} color={COLORS.textBody} />
         </TouchableOpacity>
       </View>
@@ -205,7 +261,11 @@ function Header({ name }: { name: string }) {
 function CalendarPill() {
   const router = useRouter();
   return (
-    <TouchableOpacity style={styles.calendarPill} onPress={() => router.push('/calendar')} testID="calendar-pill">
+    <TouchableOpacity 
+      style={styles.calendarPill} 
+      onPress={() => router.push('/calendar')} 
+      testID="calendar-pill"
+    >
       <Feather name="calendar" size={16} color={COLORS.primary} />
       <Text style={styles.calendarText}>Calendar</Text>
       <Feather name="chevron-right" size={14} color={COLORS.textBody} />
@@ -229,8 +289,14 @@ function RecoveryScorecard({ score, momentum }: { score: number; momentum: numbe
           <Text style={styles.scoreTitle}>Recovery Index</Text>
           <Text style={styles.scoreSubtitle}>Based on your last 7 days</Text>
           <View style={[styles.scoreBadge, !isPositive && styles.scoreBadgeNeg]}>
-            <Feather name={isPositive ? 'trending-up' : 'trending-down'} size={14} color={isPositive ? COLORS.successText : '#E53E3E'} />
-            <Text style={[styles.scoreBadgeText, !isPositive && styles.scoreBadgeTextNeg]}> {isPositive ? '+' : ''}{momentum}%</Text>
+            <Feather 
+              name={isPositive ? 'trending-up' : 'trending-down'} 
+              size={14} 
+              color={isPositive ? COLORS.successText : '#E53E3E'} 
+            />
+            <Text style={[styles.scoreBadgeText, !isPositive && styles.scoreBadgeTextNeg]}>
+              {' '}{isPositive ? '+' : ''}{momentum}%
+            </Text>
             <Text style={styles.scoreBadgeLabel}> this week</Text>
           </View>
         </View>
@@ -239,30 +305,9 @@ function RecoveryScorecard({ score, momentum }: { score: number; momentum: numbe
   );
 }
 
-const METRICS = [];
-
-interface SleepData {
-  avg: number;
-  latest: number;
-  cumulative: number;
-  records: any[];
-}
-
-interface HomeMetrics {
-  back_to_back: number;
-  meetings_count: number;
-  avg_stress_3d: number;
-  stress_sessions_count: number;
-}
-
 function HowWeKnowYou({ sleepDebt, homeMetrics }: { sleepDebt: SleepData; homeMetrics: HomeMetrics }) {
-  const debtLevel = sleepDebt.avg >= 4 ? 'Critical' : sleepDebt.avg >= 2 ? 'High' : 'Normal';
   const debtColor = sleepDebt.avg >= 4 ? '#E53E3E' : sleepDebt.avg >= 2 ? '#DD6B20' : '#38A169';
-
-  // Back-to-back color
   const b2bColor = homeMetrics.back_to_back >= 3 ? '#E53E3E' : homeMetrics.back_to_back >= 1 ? '#DD6B20' : '#38A169';
-
-  // Voice stress color
   const stressAvg = homeMetrics.avg_stress_3d;
   const stressColor = stressAvg >= 70 ? '#E53E3E' : stressAvg >= 45 ? '#DD6B20' : '#38A169';
   const stressLabel = stressAvg >= 70 ? 'High' : stressAvg >= 45 ? 'Moderate' : 'Low';
@@ -271,7 +316,6 @@ function HowWeKnowYou({ sleepDebt, homeMetrics }: { sleepDebt: SleepData; homeMe
     <View style={styles.sectionContainer} testID="how-we-know-you-section">
       <Text style={styles.sectionTitle}>How We Know You</Text>
       <View style={styles.metricsRow}>
-        {/* Sleep Debt Card - Real Data */}
         <View style={[styles.metricCard, styles.sleepDebtCard]} testID="sleep-debt-card">
           <View style={[styles.metricIconWrap, { backgroundColor: debtColor + '18' }]}>
             <Feather name="moon" size={20} color={debtColor} />
@@ -279,22 +323,22 @@ function HowWeKnowYou({ sleepDebt, homeMetrics }: { sleepDebt: SleepData; homeMe
           <Text style={styles.metricLabel}>Sleep Debt</Text>
           <Text style={[styles.metricValue, { color: debtColor }]}>{sleepDebt.avg}h</Text>
           <Text style={styles.metricSub}>avg / 3 days</Text>
-          {/* Mini bar chart for 3 days */}
-          <View style={styles.miniChart}>
-            {sleepDebt.records.map((r: any, i: number) => {
-              const barH = Math.max(4, Math.min(28, r.debt_hours * 5.5));
-              const barColor = r.debt_hours >= 4 ? '#E53E3E' : r.debt_hours >= 2 ? '#DD6B20' : '#38A169';
-              return (
-                <View key={i} style={styles.miniBarWrap}>
-                  <View style={[styles.miniBar, { height: barH, backgroundColor: barColor }]} />
-                  <Text style={styles.miniBarLabel}>{r.debt_hours}h</Text>
-                </View>
-              );
-            })}
-          </View>
+          {sleepDebt.records.length > 0 && (
+            <View style={styles.miniChart}>
+              {sleepDebt.records.map((r, i) => {
+                const barH = Math.max(4, Math.min(28, r.debt_hours * 5.5));
+                const barColor = r.debt_hours >= 4 ? '#E53E3E' : r.debt_hours >= 2 ? '#DD6B20' : '#38A169';
+                return (
+                  <View key={i} style={styles.miniBarWrap}>
+                    <View style={[styles.miniBar, { height: barH, backgroundColor: barColor }]} />
+                    <Text style={styles.miniBarLabel}>{r.debt_hours}h</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
 
-        {/* Back-to-Back Meetings Card */}
         <View style={styles.metricCard} testID="b2b-meetings-card">
           <View style={[styles.metricIconWrap, { backgroundColor: b2bColor + '18' }]}>
             <Feather name="users" size={20} color={b2bColor} />
@@ -304,7 +348,6 @@ function HowWeKnowYou({ sleepDebt, homeMetrics }: { sleepDebt: SleepData; homeMe
           <Text style={styles.metricSub}>today · {homeMetrics.meetings_count} total</Text>
         </View>
 
-        {/* Voice Stress 3-Day Avg Card */}
         <View style={styles.metricCard} testID="voice-stress-card">
           <View style={[styles.metricIconWrap, { backgroundColor: stressColor + '18' }]}>
             <Feather name="activity" size={20} color={stressColor} />
@@ -318,14 +361,8 @@ function HowWeKnowYou({ sleepDebt, homeMetrics }: { sleepDebt: SleepData; homeMe
   );
 }
 
-const PLAN_ITEMS = [
-  { id: '1', title: 'Morning Stretch Routine', time: '8:00 AM' },
-  { id: '2', title: 'Guided Breathing Session', time: '12:30 PM' },
-  { id: '3', title: 'Evening Recovery Walk', time: '6:00 PM' },
-];
-
-function AutoRecoveries({ items }: { items: any[] }) {
-  const getIcon = (label: string) => {
+function AutoRecoveries({ items }: { items: AutoRecoveryItem[] }) {
+  const getIcon = (label?: string) => {
     if (label?.includes('Focus')) return 'headphones' as const;
     if (label?.includes('Recovery')) return 'moon' as const;
     if (label?.includes('Relax')) return 'wind' as const;
@@ -335,7 +372,7 @@ function AutoRecoveries({ items }: { items: any[] }) {
   return (
     <View style={styles.sectionContainer} testID="auto-recoveries-section">
       <View style={styles.planHeaderRow}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={styles.headerWithIcon}>
           <Feather name="zap" size={18} color={COLORS.primary} />
           <Text style={styles.sectionTitle}>Today's Auto Recoveries</Text>
         </View>
@@ -354,17 +391,21 @@ function AutoRecoveries({ items }: { items: any[] }) {
           </View>
         </View>
       ) : (
-        items.map((item: any, idx: number) => (
+        items.map((item, idx) => (
           <View key={item.audio_id || idx} style={styles.planCard} testID={`recovery-card-${idx}`}>
             <View style={styles.planIconWrap}>
               <Feather name={getIcon(item.audio_label)} size={18} color={COLORS.primary} />
             </View>
             <View style={styles.planTextCol}>
               <Text style={styles.planTitle}>{item.audio_title || 'Scheduled Session'}</Text>
-              <Text style={styles.planTime}>{item.start_time} · {item.duration_min || 10} min</Text>
-              {item.reason ? (
-                <Text style={styles.planReason} numberOfLines={2}>{item.reason}</Text>
-              ) : null}
+              <Text style={styles.planTime}>
+                {item.start_time} · {item.duration_min || 10} min
+              </Text>
+              {item.reason && (
+                <Text style={styles.planReason} numberOfLines={2}>
+                  {item.reason}
+                </Text>
+              )}
             </View>
             <View style={styles.timeBadge}>
               <Text style={styles.timeBadgeText}>{item.audio_label || 'Recovery'}</Text>
@@ -376,7 +417,7 @@ function AutoRecoveries({ items }: { items: any[] }) {
   );
 }
 
-function VentCTA({ isRecording, onPress }: { isRecording: boolean; onPress: () => void }) {
+function VentCTA() {
   return (
     <TouchableOpacity activeOpacity={0.9} disabled testID="tribe-cta-btn">
       <LinearGradient
@@ -408,59 +449,56 @@ const TABS = [
   { id: 'you', label: 'You', icon: 'user', active: false },
 ];
 
-function BottomTabBar({ isRecording, onMicPress }: { isRecording: boolean; onMicPress: () => void }) {
+function BottomTabBar({ isRecording }: { isRecording: boolean }) {
   const router = useRouter();
   const heartbeat = useRef(new Animated.Value(1)).current;
   const pulseRing = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-  // Slower, more subtle heartbeat animation - smooth breathing effect
-  const heartbeatLoop = Animated.loop(
-    Animated.sequence([
-      Animated.timing(heartbeat, { 
-        toValue: 1.12, 
-        duration: 1800, 
-        useNativeDriver: true,
-        easing: Easing.inOut(Easing.ease)
-      }),
-      Animated.timing(heartbeat, { 
-        toValue: 1, 
-        duration: 1800, 
-        useNativeDriver: true,
-        easing: Easing.inOut(Easing.ease)
-      }),
-    ])
-  );
-  heartbeatLoop.start();
-
-  if (isRecording) {
-    // Slower pulse ring expand + fade (only when recording)
-    Animated.loop(
+    const heartbeatLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseRing, { 
-          toValue: 1, 
-          duration: 5000, 
+        Animated.timing(heartbeat, { 
+          toValue: 1.12, 
+          duration: 1800, 
           useNativeDriver: true,
-          easing: Easing.out(Easing.ease)
+          easing: Easing.inOut(Easing.ease)
         }),
-        Animated.timing(pulseRing, { 
-          toValue: 0, 
-          duration: 0, 
-          useNativeDriver: true 
+        Animated.timing(heartbeat, { 
+          toValue: 1, 
+          duration: 1800, 
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease)
         }),
       ])
-    ).start();
-  } else {
-    pulseRing.stopAnimation();
-    pulseRing.setValue(0);
-  }
+    );
+    heartbeatLoop.start();
 
-  return () => { 
-    heartbeatLoop.stop(); 
-    pulseRing.stopAnimation();
-  };
-}, [isRecording]);
+    if (isRecording) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseRing, { 
+            toValue: 1, 
+            duration: 5000, 
+            useNativeDriver: true,
+            easing: Easing.out(Easing.ease)
+          }),
+          Animated.timing(pulseRing, { 
+            toValue: 0, 
+            duration: 0, 
+            useNativeDriver: true 
+          }),
+        ])
+      ).start();
+    } else {
+      pulseRing.stopAnimation();
+      pulseRing.setValue(0);
+    }
 
+    return () => { 
+      heartbeatLoop.stop(); 
+      pulseRing.stopAnimation();
+    };
+  }, [isRecording, heartbeat, pulseRing]);
 
   const ringScale = pulseRing.interpolate({ inputRange: [0, 1], outputRange: [1, 2] });
   const ringOpacity = pulseRing.interpolate({ inputRange: [0, 0.8, 1], outputRange: [0.5, 0.1, 0] });
@@ -469,7 +507,6 @@ function BottomTabBar({ isRecording, onMicPress }: { isRecording: boolean; onMic
     if (tabId === 'favs') router.push('/audio-library');
     if (tabId === 'you') router.push('/profile');
     if (tabId === 'progress') router.push('/progress');
-    // home is current page — do nothing
   };
 
   return (
@@ -477,8 +514,12 @@ function BottomTabBar({ isRecording, onMicPress }: { isRecording: boolean; onMic
       {TABS.map((tab) => {
         if (tab.id === 'mic') {
           return (
-            <TouchableOpacity key={tab.id} style={styles.fabWrapper} onPress={() => router.push('/voice')} testID="tab-mic-btn">
-              {/* Pulse ring behind FAB when recording */}
+            <TouchableOpacity 
+              key={tab.id} 
+              style={styles.fabWrapper} 
+              onPress={() => router.push('/voice')} 
+              testID="tab-mic-btn"
+            >
               {isRecording && (
                 <Animated.View
                   style={[
@@ -499,9 +540,20 @@ function BottomTabBar({ isRecording, onMicPress }: { isRecording: boolean; onMic
           );
         }
         return (
-          <TouchableOpacity key={tab.id} style={styles.tabItem} onPress={() => handleTabPress(tab.id)} testID={`tab-${tab.id}-btn`}>
-            <Feather name={tab.icon as any} size={22} color={tab.active ? COLORS.primary : COLORS.textBody} />
-            <Text style={[styles.tabLabel, tab.active && styles.tabLabelActive]}>{tab.label}</Text>
+          <TouchableOpacity 
+            key={tab.id} 
+            style={styles.tabItem} 
+            onPress={() => handleTabPress(tab.id)} 
+            testID={`tab-${tab.id}-btn`}
+          >
+            <Feather 
+              name={tab.icon as any} 
+              size={22} 
+              color={tab.active ? COLORS.primary : COLORS.textBody} 
+            />
+            <Text style={[styles.tabLabel, tab.active && styles.tabLabelActive]}>
+              {tab.label}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -643,69 +695,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: COLORS.textBody,
   },
-  dotsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 18,
-  },
-  dot: { backgroundColor: '#C4B5D9' },
   sectionContainer: { marginBottom: 28 },
-  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   sectionTitle: {
     fontSize: 20,
     fontFamily: 'Poppins_600SemiBold',
     color: COLORS.textHeading,
     letterSpacing: -0.3,
-  },
-  recoveryCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#7F00FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 1,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  recoveryIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: COLORS.iconBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  recoveryTextCol: { flex: 1 },
-  recoveryTitle: {
-    fontSize: 15,
-    fontFamily: 'Poppins_600SemiBold',
-    color: COLORS.textHeading,
-    marginBottom: 2,
-  },
-  recoverySubtitle: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-    color: COLORS.textBody,
-  },
-  timeBadge: {
-    backgroundColor: '#F5F0FA',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    marginLeft: 8,
-  },
-  timeBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter_500Medium',
-    color: COLORS.textBody,
   },
   metricsRow: { flexDirection: 'row', gap: 12, marginTop: 14 },
   metricCard: {
@@ -779,6 +774,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  headerWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   doneBadge: {
     backgroundColor: '#F5F0FA',
     paddingHorizontal: 14,
@@ -834,21 +834,17 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     lineHeight: 16,
   },
-  planActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  planActionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+  timeBadge: {
     backgroundColor: '#F5F0FA',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkBtn: {
-    width: 36,
-    height: 36,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  timeBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: COLORS.textBody,
   },
   ventBanner: {
     flexDirection: 'row',
