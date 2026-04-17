@@ -5,6 +5,7 @@ import { LIGHT } from '../constants/theme';
 import { NUO_LOGO } from '../constants/nuoLogo';
 import Svg, { Path } from 'react-native-svg';
 import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
 import { useAuth } from '../contexts/AuthContext';
 import { setSessionToken, BACKEND_URL, apiFetch } from '../utils/api';
 
@@ -47,7 +48,7 @@ export default function AuthScreen() {
 
       // NATIVE: Use in-app browser and listen for our web-preview callback URL
       // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-      const redirectUrl = `${BACKEND_URL}/auth-callback`;
+      const redirectUrl = makeRedirectUri({ path: 'auth-callback' });
       const authUrl = `${EMERGENT_AUTH_BASE}?redirect=${encodeURIComponent(redirectUrl)}`;
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
 
