@@ -274,7 +274,36 @@ function CalendarPill() {
 }
 
 function RecoveryScorecard({ score, momentum }: { score: number; momentum: number }) {
+  const router = useRouter();
   const isPositive = momentum >= 0;
+  const hasData = score > 0;
+
+  // Empty state - no recordings yet
+  if (!hasData) {
+    return (
+      <TouchableOpacity 
+        style={styles.scorecardContainer} 
+        onPress={() => router.push('/voice')}
+        activeOpacity={0.8}
+        testID="recovery-scorecard-empty"
+      >
+        <View style={styles.scorecardRow}>
+          <View style={styles.emptyScoreWrapper}>
+            <View style={styles.emptyCircleRing}>
+              <Ionicons name="mic-outline" size={36} color={COLORS.primary} />
+            </View>
+            <Text style={styles.emptyTapText}>Tap mic{'\n'}to start</Text>
+          </View>
+          <View style={styles.scoreInfoCol}>
+            <Text style={styles.scoreTitle}>Recovery Index</Text>
+            <Text style={styles.emptySubtitle}>Record your voice{'\n'}to see your score</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  // Normal state with data
   return (
     <View style={styles.scorecardContainer} testID="recovery-scorecard">
       <View style={styles.scorecardRow}>
@@ -697,6 +726,32 @@ const styles = StyleSheet.create({
   },
   scorecardRow: { flexDirection: 'row', alignItems: 'center', gap: 20 },
   scoreCircleWrapper: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  emptyScoreWrapper: { alignItems: 'center', justifyContent: 'center' },
+  emptyCircleRing: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    borderColor: '#E0D4F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  emptyTapText: {
+    fontSize: 15,
+    fontFamily: 'Inter_500Medium',
+    color: COLORS.textBody,
+    textAlign: 'center',
+    marginTop: 12,
+    lineHeight: 20,
+  },
+  emptySubtitle: {
+    fontSize: 15,
+    fontFamily: 'Inter_400Regular',
+    color: COLORS.textBody,
+    marginTop: 8,
+    lineHeight: 22,
+  },
   scoreTextOverlay: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   scoreNumber: {
     fontSize: 36,
