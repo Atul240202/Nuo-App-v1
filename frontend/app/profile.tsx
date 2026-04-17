@@ -143,9 +143,23 @@ export default function ProfileScreen() {
           text: 'Log Out',
           style: 'destructive',
           onPress: async () => {
-            await logout();
-            await AsyncStorage.multiRemove(['onboarding_complete', 'userEmail', 'userName']);
-            router.replace('/auth');
+            try {
+              // Clear auth context
+              await logout();
+              // Clear all local storage
+              await AsyncStorage.multiRemove([
+                'onboarding_complete', 
+                'userEmail', 
+                'userName',
+                'auth_token',
+                'session_token',
+              ]);
+              // Navigate to auth screen
+              router.replace('/auth');
+            } catch (e) {
+              // Force navigate even if error
+              router.replace('/auth');
+            }
           },
         },
       ]

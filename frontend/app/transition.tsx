@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Animated, StyleSheet, StatusBar, Image } from 'react-native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LIGHT } from '../constants/theme';
 import { NUO_LOGO } from '../constants/nuoLogo';
 
@@ -13,6 +14,9 @@ export default function TransitionScreen() {
   const dot3 = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
+    // Mark onboarding as complete
+    AsyncStorage.setItem('onboarding_complete', 'true');
+    
     Animated.timing(fadeIn, { toValue: 1, duration: 800, useNativeDriver: true }).start();
 
     // Spinning logo
@@ -31,7 +35,7 @@ export default function TransitionScreen() {
     dotLoop(dot2, 300).start();
     dotLoop(dot3, 600).start();
 
-    const timer = setTimeout(() => router.replace('/voice'), 3000);
+    const timer = setTimeout(() => router.replace('/home'), 3000);
     return () => clearTimeout(timer);
   }, []);
 

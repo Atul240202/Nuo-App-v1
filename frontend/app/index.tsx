@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Animated, StyleSheet, ImageBackground, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GRADIENT_BG_BASE64, DARK } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -39,16 +40,34 @@ export default function LogoScreen() {
       Animated.timing(microOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
     ]).start();
 
-    const timer = setTimeout(() => {
+    const checkOnboardingAndNavigate = async () => {
       if (loading) return; // keep splash while auth resolving
-      if (user && user.personalization) {
-        router.replace('/home');
-      } else if (user) {
-        router.replace('/intro');
+      
+      // Check if user has completed onboarding
+      const onboardingComplete = await AsyncStorage.getItem('onboarding_complete');
+      
+      if (user) {
+        // User is logged in
+        if (user.personalization || onboardingComplete === 'true') {
+          // User has completed onboarding - go directly to home
+          router.replace('/home');
+        } else {
+          // User is logged in but hasn't completed onboarding
+          router.replace('/intro');
+        }
       } else {
-        router.replace('/splash1');
+        // User is not logged in
+        if (onboardingComplete === 'true') {
+          // Was logged in before, show auth screen
+          router.replace('/auth');
+        } else {
+          // First time user, show onboarding splash
+          router.replace('/splash1');
+        }
       }
-    }, 3500);
+    };
+
+    const timer = setTimeout(checkOnboardingAndNavigate, 3500);
     return () => clearTimeout(timer);
   }, [loading, user]);
 
