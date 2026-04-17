@@ -115,18 +115,18 @@ export default function VoiceScreen() {
         Animated.timing(ctaGlow, { toValue: 0.6, duration: 1500, useNativeDriver: true }),
       ])).start();
     } else if (state === 'recording') {
-      // Stop idle ripples, start red recording rings (faster, filled)
+      // Stop idle ripples, start violet listening rings (same as processing but slightly faster)
       [idleRipple1, idleRipple2, idleRipple3].forEach(r => { r.stopAnimation(); r.setValue(0); });
       ctaGlow.stopAnimation();
-      const makeRedRing = (anim: Animated.Value, delay: number) =>
+      const makeListeningRing = (anim: Animated.Value, delay: number) =>
         Animated.loop(Animated.sequence([
           Animated.delay(delay),
-          Animated.timing(anim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 1, duration: 2500, useNativeDriver: true }),
           Animated.timing(anim, { toValue: 0, duration: 0, useNativeDriver: true }),
         ]));
-      makeRedRing(ring1, 0).start();
-      makeRedRing(ring2, 333).start();
-      makeRedRing(ring3, 666).start();
+      makeListeningRing(ring1, 0).start();
+      makeListeningRing(ring2, 833).start();
+      makeListeningRing(ring3, 1666).start();
     } else if (state === 'processing') {
       // Stop idle ripples, start violet processing rings
       [idleRipple1, idleRipple2, idleRipple3].forEach(r => { r.stopAnimation(); r.setValue(0); });
@@ -254,11 +254,12 @@ export default function VoiceScreen() {
               }]} />
             ))}
 
-            {/* Recording red filled rings (only when recording) */}
+            {/* Recording violet outline rings (same style as processing - shows Nuo is listening) */}
             {state === 'recording' && [ring1, ring2, ring3].map((a, i) => (
-              <Animated.View key={`rec-${i}`} style={[styles.recordingRing, {
-                transform: [{ scale: recRingScale(a) }],
-                opacity: recRingOpacity(a),
+              <Animated.View key={`rec-${i}`} style={[styles.ring, { 
+                borderColor: C.violet, 
+                transform: [{ scale: ringScale(a) }], 
+                opacity: ringOpacity(a) 
               }]} />
             ))}
 
