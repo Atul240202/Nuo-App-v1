@@ -1,226 +1,164 @@
-#!/usr/bin/env python3
 """
-Backend API Testing for Nuo App
-Tests the audio library endpoint and other core APIs
+Backend auth refactor tests.
+Tests that user-scoped endpoints return 401 without auth and 200 with valid Bearer token.
 """
-
-import requests
-import json
 import sys
-from urllib.parse import urljoin
+import requests
 
-# Get backend URL from frontend environment
-BACKEND_URL = "https://nuo-vocal-biometrics.preview.emergentagent.com"
-API_BASE = f"{BACKEND_URL}/api"
+BASE_URL = "https://nuo-vocal-biometrics.preview.emergentagent.com/api"
 
-def test_health_check():
-    """Test GET /api/ health check endpoint"""
-    print("🔍 Testing health check endpoint...")
+results = []
+
+
+def record(name, passed, detail=""):
+    status = "PASS" if passed else "FAIL"
+    results.append((status, name, detail))
+    print(f"[{status}] {name} {('- ' + detail) if detail else ''}")
+
+
+def get_session_token():
+    r = requests.post(f"{BASE_URL}/auth/mock", timeout=30)
+    if r.status_code != 200:
+        print(f"CRITICAL: /auth/mock failed: {r.status_code} {r.text}")
+        sys.exit(1)
+    data = r.json()
+    token = data.get("session_token")
+    user = data.get("user")
+    print(f"Got session_token for user: {user.get('email')} token={token[:20]}...")
+    return token
+
+
+def test_endpoint(method, path, token=None, auth_ok_codes=None, extra_params=None, data=None):
+    if auth_ok_codes is None:
+        auth_ok_codes = {200}
+    full_url = f"{BASE_URL}{path}"
+
+    # (a) WITHOUT auth
+    s = requests.Session()
     try:
-        response = requests.get(f"{API_BASE}/", timeout=10)
-        print(f"Status Code: {response.status_code}")
-        
-        if response.status_code == 200:
-            data = response.json()
-            print(f"Response: {data}")
-            if data.get("message") == "Nuo API running":
-                print("✅ Health check passed")
-                return True
-            else:
-                print("❌ Health check failed - unexpected message")
-                return False
+        if method == "GET":
+            r_no_auth = s.request(method, full_url, params=extra_params, timeout=30)
         else:
-            print(f"❌ Health check failed - status {response.status_code}")
-            return False
+            r_no_auth = s.request(method, full_url, params=extra_params, json=data, timeout=30)
     except Exception as e:
-        print(f"❌ Health check failed - error: {e}")
-        return False
+        record(f"{method} {path} [no auth]", False, f"exception: {e}")
+        return
 
-def test_session_status():
-    """Test GET /api/session/status endpoint"""
-    print("\n🔍 Testing session status endpoint...")
-    try:
-        response = requests.get(f"{API_BASE}/session/status?email=atuljha2402@gmail.com", timeout=10)
-        print(f"Status Code: {response.status_code}")
-        
-        if response.status_code == 200:
-            data = response.json()
-            print(f"Response: {json.dumps(data, indent=2)}")
-            
-            # Check required fields
-            required_fields = ["allowed", "reason", "sessions_used", "sessions_limit"]
-            missing_fields = [field for field in required_fields if field not in data]
-            
-            if missing_fields:
-                print(f"❌ Session status failed - missing fields: {missing_fields}")
-                return False
-            else:
-                print("✅ Session status passed")
-                return True
-        else:
-            print(f"❌ Session status failed - status {response.status_code}")
-            return False
-    except Exception as e:
-        print(f"❌ Session status failed - error: {e}")
-        return False
-
-def test_payment_plans():
-    """Test GET /api/payment/plans endpoint"""
-    print("\n🔍 Testing payment plans endpoint...")
-    try:
-        response = requests.get(f"{API_BASE}/payment/plans", timeout=10)
-        print(f"Status Code: {response.status_code}")
-        
-        if response.status_code == 200:
-            data = response.json()
-            print(f"Response: {json.dumps(data, indent=2)}")
-            
-            # Check required fields
-            if "razorpay_key" not in data or "plans" not in data:
-                print("❌ Payment plans failed - missing required fields")
-                return False
-            
-            # Check plans structure
-            plans = data["plans"]
-            if not isinstance(plans, list) or len(plans) == 0:
-                print("❌ Payment plans failed - plans should be non-empty list")
-                return False
-            
-            # Check each plan has required fields
-            plan_fields = ["id", "label", "price", "amount_paise", "days"]
-            for plan in plans:
-                missing = [field for field in plan_fields if field not in plan]
-                if missing:
-                    print(f"❌ Payment plans failed - plan missing fields: {missing}")
-                    return False
-            
-            print("✅ Payment plans passed")
-            return True
-        else:
-            print(f"❌ Payment plans failed - status {response.status_code}")
-            return False
-    except Exception as e:
-        print(f"❌ Payment plans failed - error: {e}")
-        return False
-
-def test_audio_library():
-    """Test GET /api/audio/library endpoint - main focus"""
-    print("\n🔍 Testing audio library endpoint...")
-    try:
-        response = requests.get(f"{API_BASE}/audio/library", timeout=10)
-        print(f"Status Code: {response.status_code}")
-        
-        if response.status_code != 200:
-            print(f"❌ Audio library failed - status {response.status_code}")
-            if response.text:
-                print(f"Error response: {response.text}")
-            return False
-        
-        data = response.json()
-        print(f"Response structure: {list(data.keys())}")
-        
-        # Check response structure
-        if "tracks" not in data or "count" not in data:
-            print("❌ Audio library failed - missing 'tracks' or 'count' field")
-            return False
-        
-        tracks = data["tracks"]
-        count = data["count"]
-        
-        print(f"Found {count} tracks")
-        
-        # Check count matches tracks length
-        if count != len(tracks):
-            print(f"❌ Audio library failed - count ({count}) doesn't match tracks length ({len(tracks)})")
-            return False
-        
-        # Should have 3 seed tracks if collection was empty
-        if count < 3:
-            print(f"❌ Audio library failed - expected at least 3 tracks, got {count}")
-            return False
-        
-        # Check each track structure
-        required_track_fields = ["audio_id", "title", "label", "desc", "duration", "duration_sec", "file_url"]
-        expected_titles = ["40Hz Binaural Focus", "Alpha Wave Concentration", "Flow State Ambient"]
-        found_titles = []
-        
-        for i, track in enumerate(tracks):
-            print(f"\nTrack {i+1}: {track.get('title', 'NO TITLE')}")
-            
-            # Check required fields
-            missing_fields = [field for field in required_track_fields if field not in track]
-            if missing_fields:
-                print(f"❌ Track {i+1} missing fields: {missing_fields}")
-                return False
-            
-            # Check file_url is valid HTTPS URL
-            file_url = track.get("file_url", "")
-            if not file_url.startswith("https://"):
-                print(f"❌ Track {i+1} file_url should start with https://, got: {file_url}")
-                return False
-            
-            # Collect titles
-            title = track.get("title", "")
-            found_titles.append(title)
-            
-            # Print track details
-            print(f"  - ID: {track.get('audio_id')}")
-            print(f"  - Label: {track.get('label')}")
-            print(f"  - Duration: {track.get('duration')} ({track.get('duration_sec')}s)")
-            print(f"  - URL: {file_url[:50]}...")
-        
-        # Check expected titles are present
-        missing_titles = [title for title in expected_titles if title not in found_titles]
-        if missing_titles:
-            print(f"❌ Audio library failed - missing expected titles: {missing_titles}")
-            print(f"Found titles: {found_titles}")
-            return False
-        
-        print(f"\n✅ Audio library passed - all {count} tracks valid")
-        print(f"✅ All expected titles found: {expected_titles}")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Audio library failed - error: {e}")
-        return False
-
-def run_all_tests():
-    """Run all backend tests"""
-    print("🚀 Starting Backend API Tests for Nuo App")
-    print(f"Backend URL: {BACKEND_URL}")
-    print("=" * 60)
-    
-    results = {}
-    
-    # Test all endpoints
-    results["health_check"] = test_health_check()
-    results["session_status"] = test_session_status()
-    results["payment_plans"] = test_payment_plans()
-    results["audio_library"] = test_audio_library()
-    
-    # Summary
-    print("\n" + "=" * 60)
-    print("📊 TEST SUMMARY")
-    print("=" * 60)
-    
-    passed = 0
-    total = len(results)
-    
-    for test_name, result in results.items():
-        status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{test_name.replace('_', ' ').title()}: {status}")
-        if result:
-            passed += 1
-    
-    print(f"\nOverall: {passed}/{total} tests passed")
-    
-    if passed == total:
-        print("🎉 All tests passed!")
-        return True
+    if r_no_auth.status_code == 401:
+        record(f"{method} {path} [no auth -> 401]", True)
     else:
-        print("⚠️  Some tests failed!")
-        return False
+        record(f"{method} {path} [no auth -> 401]", False,
+               f"got {r_no_auth.status_code}, body={r_no_auth.text[:200]}")
+
+    # (b) WITH auth
+    if token:
+        s = requests.Session()
+        headers = {"Authorization": f"Bearer {token}"}
+        try:
+            if method == "GET":
+                r_auth = s.request(method, full_url, headers=headers, params=extra_params, timeout=30)
+            else:
+                r_auth = s.request(method, full_url, headers=headers, params=extra_params, json=data, timeout=30)
+        except Exception as e:
+            record(f"{method} {path} [with auth]", False, f"exception: {e}")
+            return
+
+        if r_auth.status_code in auth_ok_codes:
+            record(f"{method} {path} [with auth -> {r_auth.status_code}]", True)
+        else:
+            record(f"{method} {path} [with auth]", False,
+                   f"expected {auth_ok_codes}, got {r_auth.status_code}, body={r_auth.text[:300]}")
+
+
+def main():
+    print(f"Base URL: {BASE_URL}")
+    print("=" * 80)
+
+    token = get_session_token()
+    print("=" * 80)
+
+    endpoints = [
+        ("GET", "/auth/me", {200}, None, None),
+        ("GET", "/recovery-index", {200}, None, None),
+        ("GET", "/sleep-debt", {200}, None, None),
+        ("GET", "/metrics/home", {200}, None, None),
+        ("GET", "/session/status", {200}, None, None),
+        ("GET", "/interventions/today", {200}, None, None),
+        ("POST", "/interventions/generate", {200}, None, None),
+        ("GET", "/progress/summary", {200}, {"period": "week"}, None),
+        ("GET", "/interventions/count", {200}, {"period": "week"}, None),
+        ("GET", "/achievements", {200}, None, None),
+        ("GET", "/calendar/events", {200, 400}, None, None),
+        ("POST", "/calendar/recalculate", {200, 400}, None, None),
+        ("DELETE", "/debug/clear-subscription", {200}, None, None),
+    ]
+
+    for method, path, auth_ok, params, body in endpoints:
+        test_endpoint(method, path, token=token, auth_ok_codes=auth_ok,
+                      extra_params=params, data=body)
+
+    print("=" * 80)
+    # email= query param should NOT bypass auth
+    r = requests.get(f"{BASE_URL}/recovery-index",
+                     params={"email": "atuljha2402@gmail.com"}, timeout=30)
+    if r.status_code == 401:
+        record("GET /recovery-index?email=... [no bearer -> 401]", True)
+    else:
+        record("GET /recovery-index?email=... [no bearer -> 401]", False,
+               f"LEAK! got {r.status_code}, body={r.text[:200]}")
+
+    # voice/analyze — 401 without auth
+    r = requests.post(f"{BASE_URL}/voice/analyze", timeout=30)
+    if r.status_code == 401:
+        record("POST /voice/analyze [no auth -> 401]", True)
+    else:
+        record("POST /voice/analyze [no auth -> 401]", False,
+               f"got {r.status_code}, body={r.text[:200]}")
+
+    # audio/library — public
+    r = requests.get(f"{BASE_URL}/audio/library", timeout=30)
+    if r.status_code == 200:
+        record("GET /audio/library [public -> 200]", True)
+    else:
+        record("GET /audio/library [public -> 200]", False,
+               f"got {r.status_code}, body={r.text[:200]}")
+
+    # payment/plans — public
+    r = requests.get(f"{BASE_URL}/payment/plans", timeout=30)
+    if r.status_code == 200:
+        record("GET /payment/plans [public -> 200]", True)
+    else:
+        record("GET /payment/plans [public -> 200]", False,
+               f"got {r.status_code}, body={r.text[:200]}")
+
+    # Logout then re-use token
+    r = requests.post(f"{BASE_URL}/auth/logout",
+                      headers={"Authorization": f"Bearer {token}"}, timeout=30)
+    if r.status_code == 200:
+        record("POST /auth/logout [with bearer -> 200]", True)
+    else:
+        record("POST /auth/logout [with bearer -> 200]", False,
+               f"got {r.status_code}, body={r.text[:200]}")
+
+    r = requests.get(f"{BASE_URL}/auth/me",
+                     headers={"Authorization": f"Bearer {token}"}, timeout=30)
+    if r.status_code == 401:
+        record("GET /auth/me [after logout -> 401]", True)
+    else:
+        record("GET /auth/me [after logout -> 401]", False,
+               f"got {r.status_code}, body={r.text[:200]}")
+
+    print("=" * 80)
+    passed = sum(1 for r in results if r[0] == "PASS")
+    failed = sum(1 for r in results if r[0] == "FAIL")
+    print(f"\nTOTAL: {passed} passed, {failed} failed, {len(results)} total")
+    if failed:
+        print("\nFAILURES:")
+        for s, n, d in results:
+            if s == "FAIL":
+                print(f"  - {n}: {d}")
+    sys.exit(0 if failed == 0 else 1)
+
 
 if __name__ == "__main__":
-    success = run_all_tests()
-    sys.exit(0 if success else 1)
+    main()

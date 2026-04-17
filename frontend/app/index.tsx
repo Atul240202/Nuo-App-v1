@@ -2,9 +2,11 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, Animated, StyleSheet, ImageBackground, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
 import { GRADIENT_BG_BASE64, DARK } from '../constants/theme';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function LogoScreen() {
   const router = useRouter();
+  const { user, loading } = useAuth();
   const breatheAnim = useRef(new Animated.Value(1)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const taglineOpacity = useRef(new Animated.Value(0)).current;
@@ -37,9 +39,18 @@ export default function LogoScreen() {
       Animated.timing(microOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
     ]).start();
 
-    const timer = setTimeout(() => router.replace('/splash1'), 4500);
+    const timer = setTimeout(() => {
+      if (loading) return; // keep splash while auth resolving
+      if (user && user.personalization) {
+        router.replace('/home');
+      } else if (user) {
+        router.replace('/intro');
+      } else {
+        router.replace('/splash1');
+      }
+    }, 3500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [loading, user]);
 
   return (
     <View style={styles.container}>

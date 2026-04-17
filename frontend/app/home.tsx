@@ -9,12 +9,15 @@ import {
   Platform,
   StatusBar,
   Animated,
+  Easing,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import CircularProgress from '../components/CircularProgress';
+import { useAuth } from '../contexts/AuthContext';
+import { apiFetch } from '../utils/api';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -34,6 +37,7 @@ const COLORS = {
 };
 
 export default function HomeScreen() {
+  const { user, loading: authLoading } = useAuth();
   const [userName, setUserName] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -46,7 +50,7 @@ export default function HomeScreen() {
   const fetchAutoRecoveries = async () => {
     try {
       // 1. Try fetching today's saved interventions
-      const resp = await fetch(`${BACKEND_URL}/api/interventions/today?email=atuljha2402@gmail.com`);
+      const resp = await apiFetch(`/api/interventions/today`);
       if (resp.ok) {
         const data = await resp.json();
         if (data.interventions && data.interventions.length > 0) {
@@ -55,10 +59,9 @@ export default function HomeScreen() {
         }
       }
       // 2. If none, generate a new one
-      const genResp = await fetch(`${BACKEND_URL}/api/interventions/generate`, {
+      const genResp = await apiFetch(`/api/interventions/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'atuljha2402@gmail.com' }),
+        jsonBody: {},
       });
       if (genResp.ok) {
         const genData = await genResp.json();
@@ -70,18 +73,21 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
+    // Redirect to auth if not logged in
+    if (!authLoading && !user) {
+      require('expo-router').router.replace('/auth');
+      return;
+    }
+    if (!user) return;
+
     (async () => {
       try {
-        const resp = await fetch(`${BACKEND_URL}/api/auth/me`, { credentials: 'include' });
-        if (resp.ok) {
-          const user = await resp.json();
-          const firstName = (user.name || '').split(' ')[0];
-          setUserName(firstName || 'there');
-        }
+        const firstName = (user.name || '').split(' ')[0];
+        setUserName(firstName || 'there');
       } catch {}
       // Fetch recovery index
       try {
-        const resp = await fetch(`${BACKEND_URL}/api/recovery-index?email=atuljha2402@gmail.com`);
+        const resp = await apiFetch(`/api/recovery-index`);
         if (resp.ok) {
           const data = await resp.json();
           setRecoveryIndex(data.recovery_index ?? 0);
@@ -90,7 +96,7 @@ export default function HomeScreen() {
       } catch {}
       // Fetch sleep debt
       try {
-        const resp = await fetch(`${BACKEND_URL}/api/sleep-debt?email=atuljha2402@gmail.com`);
+        const resp = await apiFetch(`/api/sleep-debt`);
         if (resp.ok) {
           const data = await resp.json();
           setSleepDebt({
@@ -105,14 +111,14 @@ export default function HomeScreen() {
       await fetchAutoRecoveries();
       // Fetch home metrics (back-to-back, voice stress avg)
       try {
-        const resp = await fetch(`${BACKEND_URL}/api/metrics/home?email=atuljha2402@gmail.com`);
+        const resp = await apiFetch(`/api/metrics/home`);
         if (resp.ok) {
           const data = await resp.json();
           setHomeMetrics(data);
         }
       } catch {}
     })();
-  }, []);
+  }, [authLoading, user]);
 
   const toggleRecording = async () => {
     if (isRecording && recording) {

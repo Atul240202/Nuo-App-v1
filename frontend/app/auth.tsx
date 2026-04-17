@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, StatusBar, Image } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, StatusBar, Image, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LIGHT } from '../constants/theme';
 import { NUO_LOGO } from '../constants/nuoLogo';
 import Svg, { Path } from 'react-native-svg';
+import * as WebBrowser from 'expo-web-browser';
+import { useAuth } from '../contexts/AuthContext';
+import { setSessionToken, BACKEND_URL, apiFetch } from '../utils/api';
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+const EMERGENT_AUTH_BASE = 'https://auth.emergentagent.com/';
 
 function GoogleGIcon() {
   return (
@@ -20,25 +24,80 @@ function GoogleGIcon() {
 
 export default function AuthScreen() {
   const router = useRouter();
+  const { user, loading: authLoading, refresh } = useAuth();
   const [loading, setLoading] = useState(false);
+
+  // If already authenticated, skip straight to home
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace('/home');
+    }
+  }, [authLoading, user, router]);
 
   const handleGoogleAuth = async () => {
     setLoading(true);
     try {
-      // MOCKED: Create mock user session on backend
-      const resp = await fetch(`${BACKEND_URL}/api/auth/mock`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-      });
-      if (resp.ok) {
-        router.replace('/intro');
+      if (Platform.OS === 'web') {
+        // WEB: redirect to Emergent Auth with current origin as redirect
+        // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+        const redirectUrl = window.location.origin + '/auth-callback';
+        window.location.href = `${EMERGENT_AUTH_BASE}?redirect=${encodeURIComponent(redirectUrl)}`;
         return;
       }
-    } catch {}
-    // Fallback: just navigate
-    setTimeout(() => router.replace('/intro'), 500);
+
+      // NATIVE: Use in-app browser and listen for our web-preview callback URL
+      // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+      const redirectUrl = `${BACKEND_URL}/auth-callback`;
+      const authUrl = `${EMERGENT_AUTH_BASE}?redirect=${encodeURIComponent(redirectUrl)}`;
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
+
+      if (result.type === 'success' && result.url) {
+        // Parse session_id from URL fragment
+        const url = result.url;
+        const hashIdx = url.indexOf('#');
+        const fragment = hashIdx >= 0 ? url.substring(hashIdx + 1) : '';
+        const params = new URLSearchParams(fragment);
+        const sessionId = params.get('session_id');
+        if (!sessionId) {
+          Alert.alert('Sign-in failed', 'Could not retrieve session.');
+          setLoading(false);
+          return;
+        }
+        // Exchange with backend
+        const resp = await apiFetch('/api/auth/session', {
+          method: 'POST',
+          jsonBody: { session_id: sessionId },
+        });
+        if (!resp.ok) {
+          Alert.alert('Sign-in failed', 'Session exchange failed.');
+          setLoading(false);
+          return;
+        }
+        const data = await resp.json();
+        if (data.session_token) await setSessionToken(data.session_token);
+        const fresh = await refresh();
+        // If new user (no personalization), go to intro, else home
+        if (fresh && !fresh.personalization) {
+          router.replace('/intro');
+        } else {
+          router.replace('/home');
+        }
+      } else {
+        setLoading(false);
+      }
+    } catch (err) {
+      setLoading(false);
+      Alert.alert('Sign-in error', 'Please try again.');
+    }
   };
+
+  if (authLoading) {
+    return (
+      <View style={[styles.container, { alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={LIGHT.accent} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container} testID="auth-screen">

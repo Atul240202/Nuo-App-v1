@@ -8,6 +8,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
+import { apiFetch } from '../utils/api';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -42,9 +43,9 @@ export default function ProgressScreen() {
     setLoading(true);
     try {
       const [sumResp, intResp, achResp] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/progress/summary?period=${p}&email=atuljha2402@gmail.com`),
-        fetch(`${BACKEND_URL}/api/interventions/count?period=${p}&email=atuljha2402@gmail.com`),
-        fetch(`${BACKEND_URL}/api/achievements?email=atuljha2402@gmail.com`),
+        apiFetch(`/api/progress/summary?period=${p}`),
+        apiFetch(`/api/interventions/count?period=${p}`),
+        apiFetch(`/api/achievements`),
       ]);
       if (sumResp.ok) setSummary(await sumResp.json());
       if (intResp.ok) setInterventions(await intResp.json());

@@ -14,6 +14,7 @@ import {
 import { Sora_300Light, Sora_400Regular, Sora_500Medium } from '@expo-google-fonts/sora';
 import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
 import * as SplashScreen from 'expo-splash-screen';
+import { AuthProvider } from '../contexts/AuthContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -43,24 +44,26 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="splash1" />
-      <Stack.Screen name="splash2" />
-      <Stack.Screen name="auth" />
-      <Stack.Screen name="auth-callback" />
-      <Stack.Screen name="intro" />
-      <Stack.Screen name="personalization" />
-      <Stack.Screen name="transition" />
-      <Stack.Screen name="voice" />
-      <Stack.Screen name="debug" />
-      <Stack.Screen name="paywall" />
-      <Stack.Screen name="home" />
-      <Stack.Screen name="audio-library" />
-      <Stack.Screen name="calendar" />
-      <Stack.Screen name="profile" />
-      <Stack.Screen name="progress" />
-    </Stack>
+    <AuthProvider>
+      <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="splash1" />
+        <Stack.Screen name="splash2" />
+        <Stack.Screen name="auth" />
+        <Stack.Screen name="auth-callback" />
+        <Stack.Screen name="intro" />
+        <Stack.Screen name="personalization" />
+        <Stack.Screen name="transition" />
+        <Stack.Screen name="voice" />
+        <Stack.Screen name="debug" />
+        <Stack.Screen name="paywall" />
+        <Stack.Screen name="home" />
+        <Stack.Screen name="audio-library" />
+        <Stack.Screen name="calendar" />
+        <Stack.Screen name="profile" />
+        <Stack.Screen name="progress" />
+      </Stack>
+    </AuthProvider>
   );
 }
 

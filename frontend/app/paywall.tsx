@@ -5,6 +5,8 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { apiFetch } from '../utils/api';
+import { useAuth } from '../contexts/AuthContext';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 const RAZORPAY_KEY = process.env.EXPO_PUBLIC_RAZORPAY_KEY;
@@ -29,6 +31,7 @@ interface Plan {
 
 export default function PaywallScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selected, setSelected] = useState<string>('1_week');
   const [loading, setLoading] = useState(false);
@@ -39,7 +42,7 @@ export default function PaywallScreen() {
       try {
         const [plansResp, statusResp] = await Promise.all([
           fetch(`${BACKEND_URL}/api/payment/plans`),
-          fetch(`${BACKEND_URL}/api/session/status?email=atuljha2402@gmail.com`),
+          apiFetch(`/api/session/status`),
         ]);
         if (plansResp.ok) {
           const data = await plansResp.json();
@@ -60,11 +63,11 @@ export default function PaywallScreen() {
 
     try {
       // Create order on backend
-      const orderResp = await fetch(`${BACKEND_URL}/api/payment/create-order`, {
+      const orderResp = await apiFetch(`/api/payment/create-order`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan_id: selected, email: 'atuljha2402@gmail.com' }),
+        jsonBody: { plan_id: selected },
       });
+      if (!orderResp.ok) { setLoading(false); return; }
       const orderData = await orderResp.json();
 
       if (Platform.OS === 'web') {
@@ -88,15 +91,13 @@ export default function PaywallScreen() {
           handler: async (response: any) => {
             // Verify payment
             try {
-              const verifyResp = await fetch(`${BACKEND_URL}/api/payment/verify`, {
+              const verifyResp = await apiFetch(`/api/payment/verify`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+                jsonBody: {
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_payment_id: response.razorpay_payment_id,
                   razorpay_signature: response.razorpay_signature,
-                  email: 'atuljha2402@gmail.com',
-                }),
+                },
               });
               if (verifyResp.ok) {
                 router.replace('/voice');
@@ -105,7 +106,7 @@ export default function PaywallScreen() {
             setLoading(false);
           },
           modal: { ondismiss: () => setLoading(false) },
-          prefill: { email: 'atuljha2402@gmail.com' },
+          prefill: { email: user?.email || '' },
           theme: { color: '#8b5cf6' },
         };
 

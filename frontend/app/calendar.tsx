@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { apiFetch } from '../utils/api';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -47,7 +48,7 @@ export default function CalendarScreen() {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/calendar/events?email=atuljha2402@gmail.com`);
+      const resp = await apiFetch(`/api/calendar/events`);
       if (resp.ok) {
         const data = await resp.json();
         setEvents(data.events || []);
@@ -64,7 +65,8 @@ export default function CalendarScreen() {
   const reconnectCalendar = async () => {
     setLoading(true);
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/calendar/auth?source=calendar`);
+      const resp = await apiFetch(`/api/calendar/auth?source=calendar`);
+      if (!resp.ok) throw new Error();
       const data = await resp.json();
       if (data.auth_url) {
         if (Platform.OS === 'web') {
@@ -81,10 +83,9 @@ export default function CalendarScreen() {
     // Recalculate metrics and save to MongoDB before closing
     setRecalculating(true);
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/calendar/recalculate`, {
+      const resp = await apiFetch(`/api/calendar/recalculate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'atuljha2402@gmail.com' }),
+        jsonBody: {},
       });
       if (resp.ok) {
         const data = await resp.json();

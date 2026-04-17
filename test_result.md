@@ -102,9 +102,23 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Build Nuo app with audio library page accessible from 'My Favs' bottom tab, showing all binaural audio tracks with inline playback and animated waveform visualizer."
+user_problem_statement: "Replace mocked Google auth with real Emergent Google login. All user-specific backend endpoints should read the user from the session token (cookie or Authorization Bearer) instead of a hardcoded email. Persist the logged-in user everywhere (calendar, /auth/me, audio-intervention routes, home/progress/profile/debug screens)."
 
 backend:
+  - task: "Real Emergent Google Auth — all endpoints use authenticated user"
+    implemented: true
+    working: true
+    file: "server.py, auth_utils.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Created auth_utils.get_current_user FastAPI dependency that reads session_token from httpOnly cookie OR Authorization: Bearer header, looks up user_sessions, validates expiry, and returns the full user dict. Refactored the following endpoints to use Depends(get_current_user) and drop the hardcoded email default: /voice/analyze, /calendar/events, /calendar/recalculate, /session/status, /payment/create-order, /payment/verify, /recovery-index, /sleep-debt, /progress/summary, /interventions/count, /interventions/today, /interventions/generate, /interventions/save, /interventions/cancel, /achievements, /metrics/home, /debug/clear-subscription. Unauthenticated calls must now return 401. Calendar OAuth callback still links tokens to the Google email returned by Google (dropped the atuljha fallback). /auth/logout now accepts Bearer token too. Existing /auth/session, /auth/me still work."
+        - working: true
+          agent: "testing"
+          comment: "All 32 auth tests PASSED. Verified each target endpoint twice: (a) without Authorization header → 401 Unauthorized, (b) with valid Bearer session_token (obtained via POST /api/auth/mock) → 200 OK. Endpoints verified: GET /auth/me, GET /recovery-index, GET /sleep-debt, GET /metrics/home, GET /session/status, GET /interventions/today, POST /interventions/generate, GET /progress/summary?period=week, GET /interventions/count?period=week, GET /achievements, GET /calendar/events, POST /calendar/recalculate, DELETE /debug/clear-subscription, POST /voice/analyze (no-auth only). Additional checks also PASSED: (1) GET /recovery-index?email=atuljha2402@gmail.com WITHOUT a Bearer header still returns 401 — the legacy email query-param fallback has been fully removed, no data leak. (2) POST /auth/logout with Bearer token returns 200 and deletes the session; subsequent GET /auth/me with the same token returns 401 as expected. (3) GET /api/audio/library remains public (200 without auth). (4) GET /api/payment/plans remains public (200 without auth). No endpoints leak data to unauthenticated users; no authed calls failed."
   - task: "GET /api/audio/library endpoint returns all audio tracks from MongoDB"
     implemented: true
     working: true
@@ -113,67 +127,38 @@ backend:
     priority: "high"
     needs_retesting: false
     status_history:
-        - working: "NA"
-          agent: "main"
-          comment: "Added GET /api/audio/library endpoint that fetches from audio_library collection with fallback to seed tracks. Auto-seeds if empty."
         - working: true
           agent: "testing"
-          comment: "✅ TESTED SUCCESSFULLY: GET /api/audio/library endpoint working perfectly. Returns 3 seed tracks with correct structure: tracks array + count field. Each track has all required fields (audio_id, title, label, desc, duration, duration_sec, file_url). All file_urls are valid HTTPS URLs. Expected track titles confirmed: '40Hz Binaural Focus', 'Alpha Wave Concentration', 'Flow State Ambient'. Auto-seeding functionality working. Also verified other endpoints: GET /api/ (health check), GET /api/session/status, GET /api/payment/plans - all working correctly."
-        - working: true
-          agent: "testing"
-          comment: "✅ RE-TESTED AFTER VOICE ANALYSIS UPDATES: All backend APIs still working perfectly after voice_analysis.py and nuo_prompts.py updates. GET /api/audio/library returns 3 tracks correctly, GET /api/ health check working, GET /api/session/status returns session info with active plan. Python imports verified: compute_calendar_context and compute_urgency_tier from voice_analysis.py import successfully, SYSTEM_PROMPT and build_user_prompt from nuo_prompts.py import successfully (prompt length: 14913 chars). No syntax errors detected. Backend implementation remains stable."
-  - task: "Voice analysis Python imports verification"
-    implemented: true
-    working: true
-    file: "voice_analysis.py, nuo_prompts.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-        - working: true
-          agent: "testing"
-          comment: "✅ PYTHON IMPORTS VERIFIED: Successfully imported compute_calendar_context and compute_urgency_tier from voice_analysis.py. Successfully imported SYSTEM_PROMPT and build_user_prompt from nuo_prompts.py. SYSTEM_PROMPT length: 14913 characters. No syntax errors in updated files. All new functions are importable and ready for use."
+          comment: "Previously verified."
 
 frontend:
-  - task: "Audio Library page with track list, inline playback, animated waveform, and progress bar"
+  - task: "AuthContext + apiFetch with Bearer token, Emergent OAuth flow on web/native"
     implemented: true
     working: "NA"
-    file: "app/audio-library.tsx"
+    file: "contexts/AuthContext.tsx, utils/api.ts, app/auth.tsx, app/auth-callback.tsx, app/_layout.tsx, app/index.tsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: true
     status_history:
         - working: "NA"
           agent: "main"
-          comment: "Created audio-library.tsx with: fetching tracks from backend, play/pause toggle, waveform visualizer animation, progress bar with seek, bottom tab bar with My Favs active."
-  - task: "My Favs tab navigation from home to audio library"
-    implemented: true
-    working: "NA"
-    file: "app/home.tsx"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-        - working: "NA"
-          agent: "main"
-          comment: "Wired My Favs tab in BottomTabBar to route to /audio-library. Added audio-library to _layout.tsx routes."
+          comment: "New AuthProvider wraps the app, rehydrates session_token from AsyncStorage, calls /api/auth/me on boot. utils/api.apiFetch auto-attaches Authorization: Bearer. auth.tsx now either redirects to https://auth.emergentagent.com (web) or uses WebBrowser.openAuthSessionAsync (native). auth-callback.tsx extracts #session_id from URL fragment and POSTs to /api/auth/session. All screens (home, voice, progress, profile, paywall, calendar, personalization, debug) rewired to use apiFetch — no more hardcoded atuljha2402@gmail.com. Logout clears token and redirects to /auth."
 
 metadata:
   created_by: "main_agent"
-  version: "1.0"
-  test_sequence: 1
+  version: "1.1"
+  test_sequence: 2
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Real Emergent Google Auth — all endpoints use authenticated user"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
     - agent: "main"
-      message: "Major update to voice analysis pipeline. Please test: 1) GET /api/audio/library still returns tracks, 2) GET /api/ health check works, 3) The compute_calendar_context and compute_urgency_tier functions in voice_analysis.py are importable (no syntax errors). The main change is that generate_insight now accepts cal_events_full parameter and passes real calendar gaps to the LLM. Also nuo_prompts.py SYSTEM_PROMPT updated for empathetic tone. Test the backend endpoint functionality, not the full voice recording flow (that requires audio upload)."
+      message: "Please test all user-scoped backend endpoints for proper auth handling: (1) Without any Authorization header or cookie → expect 401 Unauthorized. (2) With a valid session token (create one via POST /api/auth/mock which returns session_token) sent as `Authorization: Bearer <token>` header → expect 200 and data scoped to that user's email. Endpoints to cover: GET /api/auth/me, GET /api/recovery-index, GET /api/sleep-debt, GET /api/metrics/home, GET /api/session/status, GET /api/interventions/today, POST /api/interventions/generate, GET /api/progress/summary?period=week, GET /api/interventions/count, GET /api/achievements, GET /api/calendar/events, POST /api/calendar/recalculate, DELETE /api/debug/clear-subscription. Also verify POST /api/auth/session works with a valid Emergent session_id (you can skip actual Emergent call and just confirm the 400/401 error paths). Confirm that the refactored endpoints no longer accept/read the `email` query param as a fallback. Backend auto-reloads via WatchFiles. Do NOT test the frontend."
     - agent: "testing"
-      message: "✅ BACKEND TESTING COMPLETE: All backend APIs tested successfully! GET /api/audio/library endpoint working perfectly - returns 3 seed tracks with correct structure, all required fields present, valid HTTPS URLs, and expected track titles confirmed. Also verified GET /api/ (health check), GET /api/session/status, and GET /api/payment/plans - all working correctly. Backend implementation is solid and ready for frontend integration."
-    - agent: "testing"
-      message: "✅ VOICE ANALYSIS UPDATES VERIFIED: Re-tested all backend APIs after voice_analysis.py and nuo_prompts.py updates. All endpoints remain fully functional. Python imports verified successfully: compute_calendar_context and compute_urgency_tier from voice_analysis.py import without errors, SYSTEM_PROMPT and build_user_prompt from nuo_prompts.py import successfully (SYSTEM_PROMPT length: 14913 chars). No syntax errors detected in updated files. Backend is stable and ready for production use."
+      message: "Backend auth refactor verified end-to-end. Ran /app/backend_test.py against the public REACT_APP_BACKEND_URL. 32/32 assertions passed. All 13 target endpoints correctly return 401 Unauthorized without an Authorization header and 200 OK when called with a valid Bearer session_token minted via POST /api/auth/mock. Confirmed the legacy `?email=` query-param fallback is fully removed (GET /api/recovery-index?email=atuljha2402@gmail.com without a Bearer returns 401, no data leak). POST /api/voice/analyze returns 401 without auth (multipart skipped per instructions). POST /api/auth/logout with Bearer returns 200 and invalidates the session — subsequent GET /api/auth/me with the same token returns 401. Public endpoints unchanged: GET /api/audio/library and GET /api/payment/plans both return 200 without auth. No remaining issues. Backend task can be marked complete."

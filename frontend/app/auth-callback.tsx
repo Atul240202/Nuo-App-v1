@@ -2,11 +2,12 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LIGHT } from '../constants/theme';
-
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+import { useAuth } from '../contexts/AuthContext';
+import { apiFetch, setSessionToken } from '../utils/api';
 
 export default function AuthCallback() {
   const router = useRouter();
+  const { refresh } = useAuth();
   const hasProcessed = useRef(false);
 
   useEffect(() => {
@@ -15,28 +16,31 @@ export default function AuthCallback() {
 
     const processAuth = async () => {
       try {
-        let accessToken = '';
+        let sessionId = '';
 
         if (Platform.OS === 'web') {
-          // Google OAuth implicit flow returns access_token in URL hash
-          const hash = window.location.hash;
-          const tokenMatch = hash.match(/access_token=([^&]+)/);
-          if (tokenMatch) {
-            accessToken = tokenMatch[1];
+          // Emergent Auth returns session_id in URL fragment: #session_id=xxx
+          const hash = window.location.hash || '';
+          const clean = hash.startsWith('#') ? hash.substring(1) : hash;
+          const params = new URLSearchParams(clean);
+          sessionId = params.get('session_id') || '';
+
+          // Also check query string as fallback
+          if (!sessionId) {
+            const search = new URLSearchParams(window.location.search);
+            sessionId = search.get('session_id') || '';
           }
         }
 
-        if (!accessToken) {
+        if (!sessionId) {
           router.replace('/auth');
           return;
         }
 
-        // Send Google access token to backend
-        const resp = await fetch(`${BACKEND_URL}/api/auth/google`, {
+        // Exchange session_id for session_token with backend
+        const resp = await apiFetch('/api/auth/session', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ access_token: accessToken }),
+          jsonBody: { session_id: sessionId },
         });
 
         if (!resp.ok) {
@@ -45,14 +49,19 @@ export default function AuthCallback() {
         }
 
         const data = await resp.json();
-        // Store session token for mobile
-        try {
-          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-          if (data.session_token) await AsyncStorage.setItem('session_token', data.session_token);
-        } catch {}
+        if (data.session_token) {
+          await setSessionToken(data.session_token);
+        }
 
-        // Navigate to intro (skip splashes)
-        router.replace('/intro');
+        // Reload user in AuthContext
+        const user = await refresh();
+
+        // Decide next route
+        if (user && user.personalization) {
+          router.replace('/home');
+        } else {
+          router.replace('/intro');
+        }
       } catch {
         router.replace('/auth');
       }

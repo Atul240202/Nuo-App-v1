@@ -7,6 +7,8 @@ import { useRouter } from 'expo-router';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../contexts/AuthContext';
+import { apiFetch } from '../utils/api';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -36,17 +38,30 @@ interface UserData {
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user: ctxUser, logout } = useAuth();
   const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchUser();
-  }, []);
+  }, [ctxUser]);
 
   const fetchUser = async () => {
     try {
-      // Try authenticated route first
-      const resp = await fetch(`${BACKEND_URL}/api/auth/me`, { credentials: 'include' });
+      // Use AuthContext user if available
+      if (ctxUser) {
+        setUser({
+          email: ctxUser.email || '',
+          name: ctxUser.name || '',
+          picture: ctxUser.picture || '',
+          personalization: ctxUser.personalization || null,
+          calendar_synced: !!ctxUser.google_calendar_tokens || !!(ctxUser as any).calendar_synced,
+        });
+        setLoading(false);
+        return;
+      }
+      // Fallback to /auth/me
+      const resp = await apiFetch(`/api/auth/me`);
       if (resp.ok) {
         const data = await resp.json();
         setUser({
@@ -54,34 +69,19 @@ export default function ProfileScreen() {
           name: data.name || data.display_name || '',
           picture: data.picture || '',
           personalization: data.personalization || null,
-          calendar_synced: !!data.google_calendar_tokens,
+          calendar_synced: !!data.google_calendar_tokens || !!data.calendar_synced,
         });
         setLoading(false);
         return;
       }
     } catch {}
-
-    // Fallback: fetch user data directly (mocked auth scenario)
-    try {
-      const email = 'atuljha2402@gmail.com';
-      const calResp = await fetch(`${BACKEND_URL}/api/calendar/events?email=${email}`);
-      const calConnected = calResp.ok;
-      setUser({
-        email,
-        name: 'Atul Jha',
-        picture: '',
-        personalization: null,
-        calendar_synced: calConnected,
-      });
-    } catch {
-      setUser({
-        email: 'atuljha2402@gmail.com',
-        name: 'Atul Jha',
-        picture: '',
-        personalization: null,
-        calendar_synced: false,
-      });
-    }
+    setUser({
+      email: '',
+      name: 'Nuo User',
+      picture: '',
+      personalization: null,
+      calendar_synced: false,
+    });
     setLoading(false);
   };
 
@@ -91,7 +91,8 @@ export default function ProfileScreen() {
 
   const handleCalendarSync = async () => {
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/calendar/auth?source=profile`);
+      const resp = await apiFetch(`/api/calendar/auth?source=profile`);
+      if (!resp.ok) throw new Error();
       const data = await resp.json();
       if (data.auth_url) {
         if (Platform.OS === 'web') { window.open(data.auth_url, '_blank'); }
@@ -142,10 +143,8 @@ export default function ProfileScreen() {
           text: 'Log Out',
           style: 'destructive',
           onPress: async () => {
-            try {
-              await fetch(`${BACKEND_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' });
-            } catch {}
-            await AsyncStorage.multiRemove(['onboarding_complete', 'sessionToken', 'userEmail', 'userName']);
+            await logout();
+            await AsyncStorage.multiRemove(['onboarding_complete', 'userEmail', 'userName']);
             router.replace('/auth');
           },
         },

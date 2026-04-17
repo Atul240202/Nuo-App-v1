@@ -6,6 +6,8 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { LIGHT } from '../constants/theme';
+import { apiFetch } from '../utils/api';
+import { useAuth } from '../contexts/AuthContext';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -20,6 +22,7 @@ interface CalEvent {
 
 export default function DebugScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [calConnected, setCalConnected] = useState(false);
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -31,7 +34,7 @@ export default function DebugScreen() {
 
   const fetchSessionStatus = async () => {
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/session/status?email=atuljha2402@gmail.com`);
+      const resp = await apiFetch(`/api/session/status`);
       if (resp.ok) {
         const data = await resp.json();
         if (data.plan) {
@@ -46,7 +49,7 @@ export default function DebugScreen() {
 
   const clearSubscription = async () => {
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/debug/clear-subscription?email=atuljha2402@gmail.com`, { method: 'DELETE' });
+      const resp = await apiFetch(`/api/debug/clear-subscription`, { method: 'DELETE' });
       if (resp.ok) {
         const data = await resp.json();
         setSubStatus(`Cleared: ${data.subscriptions_removed} sub(s), ${data.sessions_reset} session(s) reset`);
@@ -61,7 +64,7 @@ export default function DebugScreen() {
     setLoading(true);
     setError('');
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/calendar/events?email=atuljha2402@gmail.com`);
+      const resp = await apiFetch(`/api/calendar/events`);
       if (resp.ok) {
         const data = await resp.json();
         setEvents(data.events || []);
@@ -78,7 +81,8 @@ export default function DebugScreen() {
   const connectCalendar = async () => {
     setLoading(true);
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/calendar/auth?source=debug`);
+      const resp = await apiFetch(`/api/calendar/auth?source=debug`);
+      if (!resp.ok) throw new Error();
       const data = await resp.json();
       if (data.auth_url) {
         if (Platform.OS === 'web') { window.open(data.auth_url, '_blank'); }
@@ -133,7 +137,7 @@ export default function DebugScreen() {
           <View style={[styles.statusDot, calConnected ? styles.dotGreen : styles.dotRed]} />
           <Text style={styles.statusText}>{calConnected ? 'Calendar Connected' : 'Calendar Not Connected'}</Text>
         </View>
-        <Text style={styles.emailLabel}>Email: atuljha2402@gmail.com</Text>
+        <Text style={styles.emailLabel}>Email: {user?.email || '-'}</Text>
         <Text style={styles.rangeLabel}>Showing: Past 7 days + Today</Text>
 
         {/* Razorpay / Subscription Debug Section */}

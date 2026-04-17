@@ -6,6 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LIGHT } from '../constants/theme';
+import { apiFetch } from '../utils/api';
 
 const PROFESSIONS = ['Technology', 'Finance', 'Healthcare', 'Education', 'Creative Arts', 'Sports', 'Consulting', 'Legal', 'Other'];
 const ROLES = ['Founder / CEO', 'Executive', 'Manager', 'Individual Contributor', 'Freelancer', 'Student', 'Athlete', 'Other'];
@@ -31,7 +32,7 @@ export default function PersonalizationScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const resp = await fetch(`${BACKEND_URL}/api/calendar/events?email=atuljha2402@gmail.com`);
+        const resp = await apiFetch(`/api/calendar/events`);
         if (resp.ok) setCalendarAlreadySynced(true);
       } catch {}
     })();
@@ -58,11 +59,9 @@ export default function PersonalizationScreen() {
     } else {
       // Save personalization
       try {
-        await fetch(`${BACKEND_URL}/api/user/personalization`, {
+        await apiFetch(`/api/user/personalization`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ name, age, gender, profession, role, calendar_synced: false }),
+          jsonBody: { name, age, gender, profession, role, calendar_synced: false },
         });
       } catch {}
       setComplete(true);
@@ -73,7 +72,8 @@ export default function PersonalizationScreen() {
   const handleCalendarSync = async () => {
     // Open real Google Calendar OAuth during onboarding
     try {
-      const resp = await fetch(`${BACKEND_URL}/api/calendar/auth?source=onboarding`);
+      const resp = await apiFetch(`/api/calendar/auth?source=onboarding`);
+      if (!resp.ok) throw new Error();
       const data = await resp.json();
       if (data.auth_url) {
         if (Platform.OS === 'web') {

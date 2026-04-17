@@ -1,5 +1,6 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
 from fastapi.responses import JSONResponse, RedirectResponse
+from auth_utils import get_current_user, get_current_user_optional
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -264,6 +265,10 @@ async def get_me(request: Request):
 @api_router.post("/auth/logout")
 async def logout(request: Request, response: Response):
     token = request.cookies.get("session_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
     if token:
         await db.user_sessions.delete_one({"session_token": token})
     response.delete_cookie("session_token", path="/")
@@ -301,8 +306,9 @@ from voice_analysis import (
 )
 
 @api_router.post("/voice/analyze")
-async def analyze_voice(audio: UploadFile = File(...), user_id: str = Form("atuljha2402@gmail.com")):
+async def analyze_voice(audio: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     """Full Nuo voice analysis pipeline."""
+    user_id = current_user["email"]
     session_id = f"vs_{uuid.uuid4().hex[:12]}"
 
     # 1. Save audio to tempfile
@@ -506,7 +512,9 @@ async def calendar_callback(code: str = '', state: str = '', request: Request = 
         )
         user_data = user_resp.json()
 
-    email = user_data.get('email', 'atuljha2402@gmail.com')
+    email = user_data.get('email')
+    if not email:
+        return RedirectResponse(f"/debug?error=no_email_from_google")
     real_name = user_data.get('name', '')
     picture = user_data.get('picture', '')
 
@@ -533,8 +541,9 @@ async def calendar_callback(code: str = '', state: str = '', request: Request = 
 
 
 @api_router.get("/calendar/events")
-async def get_calendar_events(email: str = 'atuljha2402@gmail.com'):
+async def get_calendar_events(current_user: dict = Depends(get_current_user)):
     """Fetch calendar events using stored tokens."""
+    email = current_user["email"]
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user or not user.get("google_calendar_tokens"):
         raise HTTPException(status_code=400, detail="Calendar not connected. Please sync first.")
@@ -612,8 +621,9 @@ async def get_calendar_events(email: str = 'atuljha2402@gmail.com'):
 
 # ─── Session Limits & Payments ─────────────────────
 @api_router.get("/session/status")
-async def session_status(email: str = 'atuljha2402@gmail.com'):
+async def session_status(current_user: dict = Depends(get_current_user)):
     """Check if user can start a session (3 free/day or has active plan)."""
+    email = current_user["email"]
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # Check active subscription
@@ -652,11 +662,11 @@ async def get_plans():
 
 
 @api_router.post("/payment/create-order")
-async def create_order(request: Request):
+async def create_order(request: Request, current_user: dict = Depends(get_current_user)):
     """Create a Razorpay order for a plan."""
     body = await request.json()
     plan_id = body.get("plan_id")
-    email = body.get("email", "atuljha2402@gmail.com")
+    email = current_user["email"]
 
     if plan_id not in PLANS:
         raise HTTPException(status_code=400, detail="Invalid plan")
@@ -686,13 +696,13 @@ async def create_order(request: Request):
 
 
 @api_router.post("/payment/verify")
-async def verify_payment(request: Request):
+async def verify_payment(request: Request, current_user: dict = Depends(get_current_user)):
     """Verify Razorpay payment and activate subscription."""
     body = await request.json()
     razorpay_order_id = body.get("razorpay_order_id")
     razorpay_payment_id = body.get("razorpay_payment_id")
     razorpay_signature = body.get("razorpay_signature")
-    email = body.get("email", "atuljha2402@gmail.com")
+    email = current_user["email"]
 
     # Verify signature
     try:
@@ -745,11 +755,12 @@ async def verify_payment(request: Request):
 
 # ─── Recovery Index ────────────────────────────────
 @api_router.get("/recovery-index")
-async def get_recovery_index(email: str = 'atuljha2402@gmail.com'):
+async def get_recovery_index(current_user: dict = Depends(get_current_user)):
     """
     1. Rolling avg of (recovery_score / recovery_capacity) over past 7 days
     2. Latest ratio minus rolling avg, expressed as percentage
     """
+    email = current_user["email"]
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
     # Fetch voice sessions (recovery_score) from past 7 days
@@ -817,8 +828,9 @@ async def get_recovery_index(email: str = 'atuljha2402@gmail.com'):
 
 # ─── Sleep Debt ─────────────────────────────────────
 @api_router.get("/sleep-debt")
-async def get_sleep_debt(email: str = 'atuljha2402@gmail.com'):
+async def get_sleep_debt(current_user: dict = Depends(get_current_user)):
     """Return past 3 days sleep debt data."""
+    email = current_user["email"]
     records = await db.sleep_debt.find(
         {"user_id": email}, {"_id": 0}
     ).sort("date", -1).to_list(3)
@@ -836,8 +848,9 @@ async def get_sleep_debt(email: str = 'atuljha2402@gmail.com'):
 
 # ─── Progress / Analytics ──────────────────────────
 @api_router.get("/progress/summary")
-async def get_progress_summary(period: str = "week", email: str = "atuljha2402@gmail.com"):
+async def get_progress_summary(period: str = "week", current_user: dict = Depends(get_current_user)):
     """Return progress summary: recovery score, chart data, health metrics."""
+    email = current_user["email"]
     now = datetime.now(timezone.utc)
     if period == "month":
         days = 30
@@ -996,8 +1009,9 @@ async def get_progress_summary(period: str = "week", email: str = "atuljha2402@g
 
 
 @api_router.get("/interventions/count")
-async def get_interventions_count(period: str = "week", email: str = "atuljha2402@gmail.com"):
+async def get_interventions_count(period: str = "week", current_user: dict = Depends(get_current_user)):
     """Return intervention counts by type for the given period."""
+    email = current_user["email"]
     now = datetime.now(timezone.utc)
     days = 7 if period == "week" else (30 if period == "month" else 365)
     start = now - timedelta(days=days)
@@ -1031,8 +1045,9 @@ async def get_interventions_count(period: str = "week", email: str = "atuljha240
 
 
 @api_router.get("/achievements")
-async def get_achievements(email: str = "atuljha2402@gmail.com"):
+async def get_achievements(current_user: dict = Depends(get_current_user)):
     """Return achievements based on user activity milestones."""
+    email = current_user["email"]
     now = datetime.now(timezone.utc)
 
     # Count real activity
@@ -1109,8 +1124,9 @@ async def get_achievements(email: str = "atuljha2402@gmail.com"):
 
 # ─── Calendar Recalculate ──────────────────────────
 @api_router.get("/metrics/home")
-async def get_home_metrics(email: str = 'atuljha2402@gmail.com'):
+async def get_home_metrics(current_user: dict = Depends(get_current_user)):
     """Return home screen metrics: back-to-back meetings today + 3-day voice stress avg."""
+    email = current_user["email"]
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # Back-to-back meetings from calendar_loads
@@ -1144,10 +1160,9 @@ async def get_home_metrics(email: str = 'atuljha2402@gmail.com'):
 
 
 @api_router.post("/calendar/recalculate")
-async def recalculate_calendar(request: Request):
+async def recalculate_calendar(current_user: dict = Depends(get_current_user)):
     """Fetch fresh calendar events, recalculate all metrics, save to MongoDB."""
-    body = await request.json()
-    email = body.get("email", "atuljha2402@gmail.com")
+    email = current_user["email"]
 
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user or not user.get("google_calendar_tokens"):
@@ -1259,8 +1274,9 @@ async def get_audio_library():
 
 # ─── Debug Endpoints ───────────────────────────────
 @api_router.delete("/debug/clear-subscription")
-async def clear_subscription(email: str = 'atuljha2402@gmail.com'):
+async def clear_subscription(current_user: dict = Depends(get_current_user)):
     """Debug: Remove active subscription so paywall can be tested again."""
+    email = current_user["email"]
     result = await db.subscriptions.delete_many({"user_id": email})
     # Also reset today's voice session count
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0)
@@ -1278,10 +1294,10 @@ async def clear_subscription(email: str = 'atuljha2402@gmail.com'):
 
 # ─── Auto Interventions ────────────────────────────
 @api_router.post("/interventions/save")
-async def save_intervention(request: Request):
+async def save_intervention(request: Request, current_user: dict = Depends(get_current_user)):
     """Save a scheduled intervention from voice analysis results."""
     body = await request.json()
-    email = body.get("email", "atuljha2402@gmail.com")
+    email = current_user["email"]
     intervention = body.get("intervention", {})
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -1303,8 +1319,9 @@ async def save_intervention(request: Request):
 
 
 @api_router.delete("/interventions/cancel")
-async def cancel_intervention(email: str = 'atuljha2402@gmail.com', start_time: str = ''):
+async def cancel_intervention(start_time: str = '', current_user: dict = Depends(get_current_user)):
     """Cancel/delete a scheduled intervention."""
+    email = current_user["email"]
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     query = {"user_id": email, "date": today, "status": "scheduled"}
     if start_time:
@@ -1314,8 +1331,9 @@ async def cancel_intervention(email: str = 'atuljha2402@gmail.com', start_time: 
 
 
 @api_router.get("/interventions/today")
-async def get_today_interventions(email: str = 'atuljha2402@gmail.com'):
+async def get_today_interventions(current_user: dict = Depends(get_current_user)):
     """Get today's scheduled auto interventions."""
+    email = current_user["email"]
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     interventions = await db.auto_interventions.find(
         {"user_id": email, "date": today, "status": "scheduled"},
@@ -1325,10 +1343,9 @@ async def get_today_interventions(email: str = 'atuljha2402@gmail.com'):
 
 
 @api_router.post("/interventions/generate")
-async def generate_intervention(request: Request):
+async def generate_intervention(current_user: dict = Depends(get_current_user)):
     """Generate a new auto intervention based on calendar gaps and last session data."""
-    body = await request.json()
-    email = body.get("email", "atuljha2402@gmail.com")
+    email = current_user["email"]
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # Check if one already exists today

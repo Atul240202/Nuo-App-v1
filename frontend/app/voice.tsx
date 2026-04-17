@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { Audio } from 'expo-av';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { NUO_LOGO } from '../constants/nuoLogo';
+import { apiFetch, getSessionToken } from '../utils/api';
 
 type NuoState = 'idle' | 'recording' | 'processing' | 'results';
 
@@ -140,7 +141,7 @@ export default function VoiceScreen() {
   const startRecording = async () => {
     // Check session limit before allowing recording
     try {
-      const statusResp = await fetch(`${BACKEND_URL}/api/session/status?email=atuljha2402@gmail.com`);
+      const statusResp = await apiFetch(`/api/session/status`);
       if (statusResp.ok) {
         const status = await statusResp.json();
         if (!status.allowed) {
@@ -172,10 +173,15 @@ export default function VoiceScreen() {
       if (uri) {
         formData.append('audio', { uri, name: 'recording.m4a', type: 'audio/m4a' } as any);
       }
-      formData.append('user_id', 'atuljha2402@gmail.com');
 
       try {
-        const resp = await fetch(`${BACKEND_URL}/api/voice/analyze`, { method: 'POST', body: formData, credentials: 'include' });
+        const token = await getSessionToken();
+        const resp = await fetch(`${BACKEND_URL}/api/voice/analyze`, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (resp.ok) { const data = await resp.json(); setResult(data); setState('results'); return; }
       } catch {}
 
@@ -350,13 +356,9 @@ function ResultsPanel({ result, onReset }: { result: FullResult; onReset: () => 
     setInterventionKept(true);
     if (sched) {
       try {
-        await fetch(`${BACKEND_URL}/api/interventions/save`, {
+        await apiFetch(`/api/interventions/save`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: 'atuljha2402@gmail.com',
-            intervention: sched,
-          }),
+          jsonBody: { intervention: sched },
         });
       } catch {}
     }
@@ -366,7 +368,7 @@ function ResultsPanel({ result, onReset }: { result: FullResult; onReset: () => 
     setInterventionKept(false);
     if (sched) {
       try {
-        await fetch(`${BACKEND_URL}/api/interventions/cancel?email=atuljha2402@gmail.com&start_time=${encodeURIComponent(sched.start_time)}`, {
+        await apiFetch(`/api/interventions/cancel?start_time=${encodeURIComponent(sched.start_time)}`, {
           method: 'DELETE',
         });
       } catch {}
