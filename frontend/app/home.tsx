@@ -454,23 +454,25 @@ function BottomTabBar({ isRecording }: { isRecording: boolean }) {
   const heartbeat = useRef(new Animated.Value(1)).current;
   const pulseRing = useRef(new Animated.Value(0)).current;
   
-  // Ripple effect animations for CTA
-  const ripple1 = useRef(new Animated.Value(0)).current;
-  const ripple2 = useRef(new Animated.Value(0)).current;
-  const ripple3 = useRef(new Animated.Value(0)).current;
+  // Wave ripple effect animations - 3 rings
+  const waveAnims = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
 
   useEffect(() => {
     const heartbeatLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(heartbeat, { 
-          toValue: 1.12, 
-          duration: 1800, 
+          toValue: 1.08, 
+          duration: 1500, 
           useNativeDriver: true,
           easing: Easing.inOut(Easing.ease)
         }),
         Animated.timing(heartbeat, { 
           toValue: 1, 
-          duration: 1800, 
+          duration: 1500, 
           useNativeDriver: true,
           easing: Easing.inOut(Easing.ease)
         }),
@@ -495,22 +497,22 @@ function BottomTabBar({ isRecording }: { isRecording: boolean }) {
           }),
         ])
       ).start();
-      // Stop CTA ripples when recording
-      [ripple1, ripple2, ripple3].forEach(r => { r.stopAnimation(); r.setValue(0); });
+      // Stop wave ripples when recording
+      waveAnims.forEach(a => { a.stopAnimation(); a.setValue(0); });
     } else {
       pulseRing.stopAnimation();
       pulseRing.setValue(0);
       
-      // Start CTA ripple effect when NOT recording
-      const createRipple = (anim: Animated.Value, delay: number) =>
+      // Start continuous wave ripple effect
+      const waveAnimations = waveAnims.map((anim, i) =>
         Animated.loop(
           Animated.sequence([
-            Animated.delay(delay),
-            Animated.timing(anim, { 
-              toValue: 1, 
-              duration: 2000, 
+            Animated.delay(i * 600), // Staggered delay: 0, 600, 1200ms
+            Animated.timing(anim, {
+              toValue: 1,
+              duration: 1800,
               useNativeDriver: true,
-              easing: Easing.out(Easing.ease)
+              easing: Easing.out(Easing.ease),
             }),
             Animated.timing(anim, { 
               toValue: 0, 
@@ -518,25 +520,20 @@ function BottomTabBar({ isRecording }: { isRecording: boolean }) {
               useNativeDriver: true 
             }),
           ])
-        );
-      createRipple(ripple1, 0).start();
-      createRipple(ripple2, 666).start();
-      createRipple(ripple3, 1333).start();
+        )
+      );
+      waveAnimations.forEach(a => a.start());
     }
 
     return () => { 
       heartbeatLoop.stop(); 
       pulseRing.stopAnimation();
-      [ripple1, ripple2, ripple3].forEach(r => r.stopAnimation());
+      waveAnims.forEach(a => a.stopAnimation());
     };
-  }, [isRecording, heartbeat, pulseRing, ripple1, ripple2, ripple3]);
+  }, [isRecording, heartbeat, pulseRing, waveAnims]);
 
   const ringScale = pulseRing.interpolate({ inputRange: [0, 1], outputRange: [1, 2] });
   const ringOpacity = pulseRing.interpolate({ inputRange: [0, 0.8, 1], outputRange: [0.5, 0.1, 0] });
-
-  // CTA Ripple interpolations
-  const rippleScale = (a: Animated.Value) => a.interpolate({ inputRange: [0, 1], outputRange: [1, 2.5] });
-  const rippleOpacity = (a: Animated.Value) => a.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.6, 0.15, 0] });
 
   const handleTabPress = (tabId: string) => {
     if (tabId === 'favs') router.push('/audio-library');
@@ -555,15 +552,23 @@ function BottomTabBar({ isRecording }: { isRecording: boolean }) {
               onPress={() => router.push('/voice')} 
               testID="tab-mic-btn"
             >
-              {/* CTA Ripple rings when NOT recording */}
-              {!isRecording && [ripple1, ripple2, ripple3].map((ripple, i) => (
+              {/* Wave ripple rings when NOT recording */}
+              {!isRecording && waveAnims.map((anim, i) => (
                 <Animated.View
-                  key={`ripple-${i}`}
+                  key={`wave-${i}`}
                   style={[
-                    styles.ctaRipple,
-                    { 
-                      transform: [{ scale: rippleScale(ripple) }], 
-                      opacity: rippleOpacity(ripple) 
+                    styles.waveRing,
+                    {
+                      opacity: anim.interpolate({ 
+                        inputRange: [0, 0.3, 1], 
+                        outputRange: [0, 0.7, 0] 
+                      }),
+                      transform: [{ 
+                        scale: anim.interpolate({ 
+                          inputRange: [0, 1], 
+                          outputRange: [1, 2.4] 
+                        }) 
+                      }],
                     },
                   ]}
                 />
@@ -978,12 +983,13 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     backgroundColor: '#FF4466',
   },
-  ctaRipple: {
+  waveRing: {
     position: 'absolute',
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: 'rgba(127, 0, 255, 0.35)',
+    borderWidth: 2.5,
+    borderColor: '#7F00FF',
   },
   fabButton: {
     width: 60,
