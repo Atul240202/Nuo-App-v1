@@ -85,6 +85,8 @@ export default function VoiceScreen() {
   const orbPulse = useRef(new Animated.Value(1)).current;
   const idleRipple1 = useRef(new Animated.Value(0)).current;
   const idleRipple2 = useRef(new Animated.Value(0)).current;
+  const idleRipple3 = useRef(new Animated.Value(0)).current;
+  const ctaGlow = useRef(new Animated.Value(0.6)).current;
 
   useEffect(() => {
     const dur = state === 'processing' ? 1300 : 2800;
@@ -95,19 +97,27 @@ export default function VoiceScreen() {
     pulseLoop.start();
 
     if (state === 'idle') {
-      // Purple idle ripples — 2 concentric rings, offset by 800ms
+      // Purple idle ripples — 3 concentric rings, offset for smooth CTA effect
       [ring1, ring2, ring3].forEach(r => { r.stopAnimation(); r.setValue(0); });
       const makeIdleRipple = (anim: Animated.Value, delay: number) =>
         Animated.loop(Animated.sequence([
           Animated.delay(delay),
-          Animated.timing(anim, { toValue: 1, duration: 2400, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 1, duration: 2000, useNativeDriver: true }),
           Animated.timing(anim, { toValue: 0, duration: 0, useNativeDriver: true }),
         ]));
       makeIdleRipple(idleRipple1, 0).start();
-      makeIdleRipple(idleRipple2, 800).start();
+      makeIdleRipple(idleRipple2, 666).start();
+      makeIdleRipple(idleRipple3, 1333).start();
+      
+      // CTA glow animation for text
+      Animated.loop(Animated.sequence([
+        Animated.timing(ctaGlow, { toValue: 1, duration: 1500, useNativeDriver: true }),
+        Animated.timing(ctaGlow, { toValue: 0.6, duration: 1500, useNativeDriver: true }),
+      ])).start();
     } else if (state === 'recording') {
       // Stop idle ripples, start red recording rings (faster, filled)
-      [idleRipple1, idleRipple2].forEach(r => { r.stopAnimation(); r.setValue(0); });
+      [idleRipple1, idleRipple2, idleRipple3].forEach(r => { r.stopAnimation(); r.setValue(0); });
+      ctaGlow.stopAnimation();
       const makeRedRing = (anim: Animated.Value, delay: number) =>
         Animated.loop(Animated.sequence([
           Animated.delay(delay),
@@ -119,7 +129,8 @@ export default function VoiceScreen() {
       makeRedRing(ring3, 666).start();
     } else if (state === 'processing') {
       // Stop idle ripples, start violet processing rings
-      [idleRipple1, idleRipple2].forEach(r => { r.stopAnimation(); r.setValue(0); });
+      [idleRipple1, idleRipple2, idleRipple3].forEach(r => { r.stopAnimation(); r.setValue(0); });
+      ctaGlow.stopAnimation();
       const makeRing = (anim: Animated.Value, delay: number) =>
         Animated.loop(Animated.sequence([
           Animated.delay(delay),
@@ -130,11 +141,13 @@ export default function VoiceScreen() {
       makeRing(ring2, 1000).start();
       makeRing(ring3, 2000).start();
     } else {
-      [ring1, ring2, ring3, idleRipple1, idleRipple2].forEach(r => { r.stopAnimation(); r.setValue(0); });
+      [ring1, ring2, ring3, idleRipple1, idleRipple2, idleRipple3].forEach(r => { r.stopAnimation(); r.setValue(0); });
+      ctaGlow.stopAnimation();
     }
     return () => {
       pulseLoop.stop();
-      [ring1, ring2, ring3, idleRipple1, idleRipple2].forEach(r => r.stopAnimation());
+      [ring1, ring2, ring3, idleRipple1, idleRipple2, idleRipple3].forEach(r => r.stopAnimation());
+      ctaGlow.stopAnimation();
     };
   }, [state]);
 
@@ -233,8 +246,8 @@ export default function VoiceScreen() {
       ) : (
         <View style={styles.center}>
           <View style={styles.ringsContainer}>
-            {/* Idle purple ripples (only when idle) */}
-            {state === 'idle' && [idleRipple1, idleRipple2].map((a, i) => (
+            {/* Idle purple ripples (only when idle) - 3 rings for stronger CTA */}
+            {state === 'idle' && [idleRipple1, idleRipple2, idleRipple3].map((a, i) => (
               <Animated.View key={`idle-${i}`} style={[styles.idleRipple, {
                 transform: [{ scale: idleRippleScale(a) }],
                 opacity: idleRippleOpacity(a),
@@ -258,8 +271,16 @@ export default function VoiceScreen() {
               <Image source={{ uri: NUO_LOGO }} style={styles.orbImage} testID="nuo-orb" />
             </Animated.View>
           </View>
+          
+          {/* CTA Text with glow effect for idle state */}
+          {state === 'idle' && (
+            <Animated.Text style={[styles.ctaText, { opacity: ctaGlow }]} testID="cta-text">
+              What are you feeling right now?
+            </Animated.Text>
+          )}
+          
           <Text style={styles.stateText}>
-            {state === 'idle' && "I'm listening when you're ready"}
+            {state === 'idle' && "Tap the mic to share"}
             {state === 'recording' && "Speak freely — I'm here"}
             {state === 'processing' && 'Understanding you...'}
           </Text>
@@ -497,6 +518,14 @@ const styles = StyleSheet.create({
   orbImage: { width: 120, height: 120 },
   stateText: { fontSize: 18, fontFamily: 'Sora_500Medium', color: C.textPrimary, textAlign: 'center', marginBottom: 8 },
   subText: { fontSize: 14, fontFamily: 'Sora_300Light', fontStyle: 'italic', color: C.textSecondary, textAlign: 'center' },
+  ctaText: { 
+    fontSize: 22, 
+    fontFamily: 'Sora_600SemiBold', 
+    color: C.teal, 
+    textAlign: 'center', 
+    marginBottom: 12,
+    letterSpacing: -0.3,
+  },
   controls: { flexDirection: 'row', alignItems: 'center', gap: 24, marginTop: 48 },
   micBtn: { width: 76, height: 76, borderRadius: 38, borderWidth: 2, borderColor: C.teal, alignItems: 'center', justifyContent: 'center' },
   micBtnActive: { backgroundColor: C.teal },

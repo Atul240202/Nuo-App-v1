@@ -453,6 +453,11 @@ function BottomTabBar({ isRecording }: { isRecording: boolean }) {
   const router = useRouter();
   const heartbeat = useRef(new Animated.Value(1)).current;
   const pulseRing = useRef(new Animated.Value(0)).current;
+  
+  // Ripple effect animations for CTA
+  const ripple1 = useRef(new Animated.Value(0)).current;
+  const ripple2 = useRef(new Animated.Value(0)).current;
+  const ripple3 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const heartbeatLoop = Animated.loop(
@@ -474,6 +479,7 @@ function BottomTabBar({ isRecording }: { isRecording: boolean }) {
     heartbeatLoop.start();
 
     if (isRecording) {
+      // Recording pulse ring
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseRing, { 
@@ -489,19 +495,48 @@ function BottomTabBar({ isRecording }: { isRecording: boolean }) {
           }),
         ])
       ).start();
+      // Stop CTA ripples when recording
+      [ripple1, ripple2, ripple3].forEach(r => { r.stopAnimation(); r.setValue(0); });
     } else {
       pulseRing.stopAnimation();
       pulseRing.setValue(0);
+      
+      // Start CTA ripple effect when NOT recording
+      const createRipple = (anim: Animated.Value, delay: number) =>
+        Animated.loop(
+          Animated.sequence([
+            Animated.delay(delay),
+            Animated.timing(anim, { 
+              toValue: 1, 
+              duration: 2000, 
+              useNativeDriver: true,
+              easing: Easing.out(Easing.ease)
+            }),
+            Animated.timing(anim, { 
+              toValue: 0, 
+              duration: 0, 
+              useNativeDriver: true 
+            }),
+          ])
+        );
+      createRipple(ripple1, 0).start();
+      createRipple(ripple2, 666).start();
+      createRipple(ripple3, 1333).start();
     }
 
     return () => { 
       heartbeatLoop.stop(); 
       pulseRing.stopAnimation();
+      [ripple1, ripple2, ripple3].forEach(r => r.stopAnimation());
     };
-  }, [isRecording, heartbeat, pulseRing]);
+  }, [isRecording, heartbeat, pulseRing, ripple1, ripple2, ripple3]);
 
   const ringScale = pulseRing.interpolate({ inputRange: [0, 1], outputRange: [1, 2] });
   const ringOpacity = pulseRing.interpolate({ inputRange: [0, 0.8, 1], outputRange: [0.5, 0.1, 0] });
+
+  // CTA Ripple interpolations
+  const rippleScale = (a: Animated.Value) => a.interpolate({ inputRange: [0, 1], outputRange: [1, 2.5] });
+  const rippleOpacity = (a: Animated.Value) => a.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.6, 0.15, 0] });
 
   const handleTabPress = (tabId: string) => {
     if (tabId === 'favs') router.push('/audio-library');
@@ -520,6 +555,19 @@ function BottomTabBar({ isRecording }: { isRecording: boolean }) {
               onPress={() => router.push('/voice')} 
               testID="tab-mic-btn"
             >
+              {/* CTA Ripple rings when NOT recording */}
+              {!isRecording && [ripple1, ripple2, ripple3].map((ripple, i) => (
+                <Animated.View
+                  key={`ripple-${i}`}
+                  style={[
+                    styles.ctaRipple,
+                    { 
+                      transform: [{ scale: rippleScale(ripple) }], 
+                      opacity: rippleOpacity(ripple) 
+                    },
+                  ]}
+                />
+              ))}
               {isRecording && (
                 <Animated.View
                   style={[
@@ -929,6 +977,13 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     backgroundColor: '#FF4466',
+  },
+  ctaRipple: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(127, 0, 255, 0.35)',
   },
   fabButton: {
     width: 60,
