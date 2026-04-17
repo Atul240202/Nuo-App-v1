@@ -695,6 +695,204 @@ async def create_order(request: Request, current_user: dict = Depends(get_curren
     return {"order_id": order["id"], "amount": plan["amount_paise"], "currency": "INR", "plan": plan}
 
 
+@api_router.get("/payment/page")
+async def payment_page(order_id: str, plan_id: str, amount: int):
+    """Serve a Razorpay checkout page for native app payments."""
+    rzp_key = os.environ.get("RAZORPAY_KEY_ID", "")
+    plan_label = PLANS.get(plan_id, {}).get("label", "Nuo Subscription")
+    
+    html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Complete Payment - Nuo</title>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a0a14 0%, #1a1a2e 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #fff;
+        }}
+        .container {{ 
+            text-align: center;
+            max-width: 400px;
+        }}
+        .logo {{ 
+            width: 80px; height: 80px; 
+            background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+            border-radius: 50%;
+            margin: 0 auto 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+        }}
+        h1 {{ font-size: 24px; margin-bottom: 8px; }}
+        .plan {{ color: #8b5cf6; font-size: 18px; margin-bottom: 4px; }}
+        .amount {{ font-size: 36px; font-weight: bold; margin-bottom: 24px; }}
+        .btn {{
+            background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+            color: #fff;
+            border: none;
+            padding: 16px 48px;
+            font-size: 18px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }}
+        .btn:hover {{ transform: scale(1.02); }}
+        .btn:disabled {{ opacity: 0.6; cursor: not-allowed; }}
+        .secure {{ margin-top: 16px; font-size: 12px; color: rgba(255,255,255,0.5); }}
+        .success {{ color: #00d4aa; }}
+        .error {{ color: #ef4444; }}
+        .spinner {{
+            width: 24px; height: 24px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }}
+        @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🎯</div>
+        <h1>Complete Payment</h1>
+        <p class="plan">{plan_label}</p>
+        <p class="amount">₹{amount // 100}</p>
+        <button id="payBtn" class="btn" onclick="startPayment()">Pay Now</button>
+        <p id="status" class="secure">🔒 Secure payment via Razorpay</p>
+    </div>
+    
+    <script>
+        function startPayment() {{
+            const btn = document.getElementById('payBtn');
+            const status = document.getElementById('status');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>';
+            
+            const options = {{
+                key: '{rzp_key}',
+                amount: {amount},
+                currency: 'INR',
+                name: 'Nuo',
+                description: '{plan_label}',
+                order_id: '{order_id}',
+                handler: function(response) {{
+                    status.className = 'success';
+                    status.innerHTML = '✅ Payment successful! You can close this page.';
+                    btn.style.display = 'none';
+                    
+                    // Verify payment in background
+                    fetch('/api/payment/verify-public', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                        }})
+                    }});
+                }},
+                modal: {{
+                    ondismiss: function() {{
+                        btn.disabled = false;
+                        btn.innerHTML = 'Pay Now';
+                    }}
+                }},
+                theme: {{ color: '#8b5cf6' }}
+            }};
+            
+            const rzp = new Razorpay(options);
+            rzp.on('payment.failed', function(response) {{
+                status.className = 'error';
+                status.innerHTML = '❌ Payment failed: ' + response.error.description;
+                btn.disabled = false;
+                btn.innerHTML = 'Try Again';
+            }});
+            rzp.open();
+        }}
+        
+        // Auto-open payment on page load
+        setTimeout(startPayment, 500);
+    </script>
+</body>
+</html>
+"""
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=html_content)
+
+
+@api_router.post("/payment/verify-public")
+async def verify_payment_public(request: Request):
+    """Verify Razorpay payment without auth (for payment page callback)."""
+    body = await request.json()
+    razorpay_order_id = body.get("razorpay_order_id")
+    razorpay_payment_id = body.get("razorpay_payment_id")
+    razorpay_signature = body.get("razorpay_signature")
+
+    # Verify signature
+    try:
+        rzp_client.utility.verify_payment_signature({
+            "razorpay_order_id": razorpay_order_id,
+            "razorpay_payment_id": razorpay_payment_id,
+            "razorpay_signature": razorpay_signature,
+        })
+    except Exception:
+        raise HTTPException(status_code=400, detail="Payment verification failed")
+
+    # Find order
+    order = await db.payment_orders.find_one({"order_id": razorpay_order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    email = order["user_id"]
+
+    # Update order status
+    await db.payment_orders.update_one(
+        {"order_id": razorpay_order_id},
+        {"$set": {"status": "paid", "payment_id": razorpay_payment_id, "paid_at": datetime.now(timezone.utc)}}
+    )
+
+    # Activate subscription
+    days = order["days"]
+    expires_at = datetime.now(timezone.utc) + timedelta(days=days)
+
+    # Extend if active sub exists
+    existing = await db.subscriptions.find_one(
+        {"user_id": email, "expires_at": {"$gt": datetime.now(timezone.utc)}, "status": "active"},
+        {"_id": 0}
+    )
+    if existing:
+        expires_at = existing["expires_at"] + timedelta(days=days)
+
+    await db.subscriptions.update_one(
+        {"user_id": email, "status": "active"},
+        {"$set": {
+            "user_id": email,
+            "plan_id": order["plan_id"],
+            "payment_id": razorpay_payment_id,
+            "expires_at": expires_at,
+            "status": "active",
+            "updated_at": datetime.now(timezone.utc),
+        }},
+        upsert=True
+    )
+
+    return {"success": True, "message": "Payment verified and subscription activated"}
+
+
 @api_router.post("/payment/verify")
 async def verify_payment(request: Request, current_user: dict = Depends(get_current_user)):
     """Verify Razorpay payment and activate subscription."""
