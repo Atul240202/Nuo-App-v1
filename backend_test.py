@@ -5,7 +5,7 @@ Tests that user-scoped endpoints return 401 without auth and 200 with valid Bear
 import sys
 import requests
 
-BASE_URL = "https://nuo-vocal-biometrics.preview.emergentagent.com/api"
+BASE_URL = "https://orb-wellness-1.preview.emergentagent.com/api"
 
 results = []
 
