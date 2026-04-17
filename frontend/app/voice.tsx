@@ -237,7 +237,7 @@ export default function VoiceScreen() {
   return (
     <View style={styles.container} testID="voice-screen">
       <StatusBar barStyle="light-content" />
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} testID="voice-back-btn">
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/home')} testID="voice-back-btn">
         <Feather name="arrow-left" size={22} color={C.textSecondary} />
       </TouchableOpacity>
 
